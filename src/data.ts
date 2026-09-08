@@ -22,9 +22,15 @@ for (let day = 0; day < 90; day++) for (let i = 0, count = 78 + Math.floor(rando
 }
 export const voiceSessions: VoiceSession[] = Array.from({ length: 2200 }, () => ({ memberId: pick(people.slice(0, 700)).id, at: new Date(endDate.getTime() - Math.floor(random() * 90) * 86400000 - Math.floor(random() * 86400000)), minutes: 12 + Math.floor(random() * 86) }))
 
-// A sustained current-window discussion gives the Trending Conversations panel
-// a realistic example of velocity without making historical volume the signal.
-for (let i = 0; i < 28; i++) {
-  const thread = conversations[i % 2];
-  messages.push({ id: `recent${i}`, memberId: pick(people.slice(0, 280)).id, channelId: thread.channelId, conversationId: thread.id, at: new Date(endDate.getTime() - (10 + i * 6) * 60000), hasReply: true, reactions: 2 + (i % 4), reactorIds: [pick(people).id, pick(people).id], text: thread.text })
+// A sustained current-window pace across several conversations gives the
+// Trending Conversations panel believable recent activity without letting
+// historical volume drive the signal.
+const trending: [string, number][] = [['t0', 8], ['t1', 7], ['t2', 6], ['t3', 5], ['t4', 3]]
+let recentIdx = 0
+for (const [ci, [convId, count]] of trending.entries()) {
+  const thread = conversations.find(c => c.id === convId)!
+  for (let i = 0; i < count; i++) {
+    messages.push({ id: `recent${recentIdx}`, memberId: people[(recentIdx * 37 + ci * 11) % 200].id, channelId: thread.channelId, conversationId: thread.id, at: new Date(endDate.getTime() - (20 + i * 9 + ci * 5) * 60000), hasReply: true, reactions: 2 + (recentIdx % 4), reactorIds: [pick(people).id, pick(people).id], text: thread.text })
+    recentIdx++
+  }
 }
