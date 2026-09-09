@@ -158,23 +158,31 @@ The design tokens are the implementation system. Figma is the visual reference.
 
 ## Typeface
 
-- Suisse
+- Geist
 
 LH = Line Height; LS = Letter Spacing.
 
+Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS −2% (−0.02em).
+
 ## Heading
 
-### lg
-- Weight: Medium
+### lg (page title)
+- Weight: Semibold
 - Size: 28px
 - Line height: 120%
-- Letter spacing: 0%
+- Letter spacing: -2%
 
 ### sm
 - Weight: Semibold
 - Size: 24px
 - Line height: 120%
-- Letter spacing: 2%
+- Letter spacing: 0%
+
+### title (card title)
+- Weight: Semibold
+- Size: 16px
+- Line height: 125%
+- Letter spacing: -1%
 
 ## Body
 
@@ -182,19 +190,19 @@ LH = Line Height; LS = Letter Spacing.
 - Weight: Medium
 - Size: 16px
 - Line height: 130%
-- Letter spacing: 0%
+- Letter spacing: -1%
 
 ### sm
 - Weight: Regular, Medium, or Semibold
 - Size: 14px
 - Line height: 140%
-- Letter spacing: 0%
+- Letter spacing: -1%
 
 ### xs
 - Weight: Regular
 - Size: 12px
 - Line height: 130%
-- Letter spacing: 0%
+- Letter spacing: -1%
 
 # Shadows
 
