@@ -91,6 +91,10 @@ Figma remains the visual source of truth.
 - Inspect the relevant Figma screen and components before implementation.
 - Match the Figma design as closely as reasonably possible.
 - Do not invent visual values when an equivalent value exists in the Figma design or design system.
+- Two design files are in use:
+  - v1: file key `leSvcL6Q3iSadrTYzarsy0` (earlier cards)
+  - v2: file key `0MuD3anQwj511C8zXzBmvM` (newer designs, e.g. Most active channels)
+- Ask the user for the current design file link when node IDs change between sessions.
 
 ### Components
 
@@ -98,6 +102,7 @@ Figma remains the visual source of truth.
 - Build reusable components when the same UI pattern appears in multiple places.
 - Do not create duplicate components that serve the same purpose.
 - Keep presentation components separate from data and business logic.
+- CardTitle is a standing rule exception: always render title on the left and the control (tabs, etc.) on the right, even when Figma stacks them. Keep the CardTitle layout unchanged regardless of the design. When CardTitle has no `action`, apply 16px top padding (`.card-title-no-action`).
 
 ### Design Tokens
 
@@ -113,6 +118,14 @@ Figma remains the visual source of truth.
 - Keep calculations and data transformation logic separate from presentation code.
 - Prefer deterministic data so the prototype produces the same results between sessions.
 - Keep related entities consistent across the application.
+
+### Recharts (v3)
+
+- `pnpm` is not on PATH. Typecheck and build with `corepack pnpm exec tsc -b` and `corepack pnpm build`. A >500 kB chunk warning on build is expected and non-blocking.
+- Recharts 3 tick labels render as `.recharts-cartesian-axis-tick-value` (not `.recharts-cartesian-axis-tick`). Grid lines are `.recharts-cartesian-grid-horizontal line`; tooltip classes are `.recharts-default-tooltip`, `.recharts-tooltip-label`, `.recharts-tooltip-item`.
+- Style Recharts SVG text/lines via CSS overrides using design tokens; props like `tick={{ fontSize }}` are unreliable.
+- `<Line fill="...">` is a no-op in Recharts 3 (the curve is always `fill: none`). To render a gradient fill under a line, use `<AreaChart>` + `<Area>` with `fill="url(#id)"` instead.
+- Hiding a series from the tooltip: set `tooltipType="none"` on the item (it becomes impossible for the default tooltip).
 
 ### Quality
 

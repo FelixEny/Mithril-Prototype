@@ -110,49 +110,61 @@ The design tokens are the implementation system. Figma is the visual reference.
 - Superuser: `Color/Special/Purple`
 - Contributor: `Color/Special/Green`
 - Regular: `Color/Special/Blue`
-- Lukers: `Color/Special/Yellow`
+- Lurkers: `Color/Special/Yellow`
 - Inactive: `Color/Special/Grayish Green`
 - Brand: `Color/Brand/200`
 - BrandMid: `Color/Brand/100`
 - BrandLight: `Color/Brand/50`
 
+#### Heatmap (activity grid)
+- 1: `#CFFCE4`
+- 2: `#9BE6BE`
+- 3: `#7CD7A6`
+- 4: `#5DC88F`
+- 5: `#3EB877`
+- 6: `#20A860`
+- 7: `#017A39`
+- scale-1 (legend start): `#BAF7CF`
+
+#### Tooltip (chart)
+- Background: `Color/Grey/900` (`#111928`)
+- Label: `Color/Grey/300` (`#D1D5DB`)
+- Value: `Color/Grey/0` (`#FFFFFF`)
+
 ## Corner Radius
 
-### Option Tokens
-- 2: `2px`
-- 4: `4px`
-- 6: `6px`
-- 8: `8px`
-- 12: `12px`
-- 16: `16px`
+Corner radii are hardcoded pixel values per the Figma design (prototype decision — radius tokens removed).
 
-### Semantic Tokens
-- xs: `2px`
-- sm: `4px`
-- md: `6px`
-- lg: `8px`
-- xl: `12px`
-- 2xl: `16px`
+Reference values used across the UI:
+- 2px — hairline details
+- 4px — square icons, small pills
+- 6px — date control, tabs active pill (inner radius), peak overlays
+- 8px — tabs container (outer radius), tag pill, chart tooltips
+- 12px — cards and card-like surfaces
 
 ## Spacing
 
 ### Option Tokens
 - 0: `0px`
+- 2: `2px`
 - 4: `4px`
 - 8: `8px`
 - 12: `12px`
 - 16: `16px`
 - 20: `20px`
 - 24: `24px`
+- 32: `32px`
 
 ### Semantic Tokens
 - none: `0px`
+- 2xs: `2px`
 - xs: `4px`
 - sm: `8px`
 - md: `12px`
 - lg: `16px`
 - xl: `20px`
 - 2xl: `24px`
+- 3xl: `32px`
 
 # Typography
 
@@ -204,6 +216,12 @@ Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS 
 - Line height: 130%
 - Letter spacing: -1%
 
+### xs-micro
+- Weight: Regular
+- Size: 10px
+- Letter spacing: -1%
+- Note: micro labels only (chart hour labels, avatar initials). Line height inherits from context.
+
 # Shadows
 
 - `shadow-xs`: `0 1px 2px 0 rgba(0, 0, 0, 0.04)`
@@ -219,12 +237,12 @@ Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS 
 2. When a value in Figma exactly matches an existing token, use that token in code even if the Figma layer or property is not explicitly mapped to the token.
 3. Prefer semantic tokens when the design calls for a semantic role. Use option tokens when a direct option value is needed or when no appropriate semantic token exists.
 4. Do not replace an existing token with an arbitrary value that represents the same value.
-5. Apply this rule to colors, spacing, corner radius, typography, and shadows.
+5. Apply this rule to colors, spacing, typography, and shadows. Exception: corner radius is not tokenized (see Corner Radius).
 6. The fact that a value is not mapped to a token in Figma does not mean it should be hard-coded in code.
 
 Example:
 - Figma shows a 12px gap → use the 12px spacing token (`Spacing/md`), even if the Figma gap is not explicitly tokenized.
-- Figma shows a 6px radius → use `Corner radius/md`.
+- Figma shows a 6px radius → hardcode `6px` (corner radii are raw pixel values).
 - Figma shows `#693CF3` → use `Color/Brand/200`.
 
 # Component Rules
