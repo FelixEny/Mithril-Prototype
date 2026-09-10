@@ -61,7 +61,7 @@ The design tokens are the implementation system. Figma is the visual reference.
 - 400: `#2A1962`
 - 300: `#3F2592`
 - 200: `#693CF3`
-- 100: `#A48DF9`
+- 100: `#B9A8FA`
 - 50: `#EFEDFF`
 
 #### Green
