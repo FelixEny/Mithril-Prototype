@@ -81,6 +81,9 @@ The design tokens are the implementation system. Figma is the visual reference.
 - Yellow: `#FDAB00`
 - Grayish Green: `#3CAA9F`
 
+#### Avatar palette (`--avatar-1..6`)
+System colors used for avatar tinting (initials circles, graph nodes, Dicebear background): Brand Purple `#693CF3`, Green/200 `#009A47`, Blue `#008EFF`, Yellow `#FDAB00`, Grayish Green `#3CAA9F`, Red `#E5484D`. Assigned deterministically per member; single source of truth is `src/avatars.ts`.
+
 ### Semantic Tokens
 
 #### Content
@@ -125,6 +128,16 @@ The design tokens are the implementation system. Figma is the visual reference.
 - 6: `#20A860`
 - 7: `#017A39`
 - scale-1 (legend start): `#BAF7CF`
+- Intensity thresholds (messages per week per weekday/hour cell — `heatLevel()` in `src/analytics.ts`):
+  - 1: ≤ 6
+  - 2: ≤ 15
+  - 3: ≤ 30
+  - 4: ≤ 50
+  - 5: ≤ 80
+  - 6: ≤ 130
+  - 7: > 130
+- Each weekday row is normalized by its own occurrence count in the selected window (not a uniform days/7), so partial weeks and custom ranges don't inflate some weekdays over others.
+- Active-members tab uses the same 7-step scale with member-count bounds (`heatActiveLevel()`): 1: ≤ 8, 2: ≤ 20, 3: ≤ 40, 4: ≤ 70, 5: ≤ 105, 6: ≤ 145, 7: > 145 (average unique active members per cell). Peak-window annotations appear on the Messages tab only.
 
 #### Tooltip (chart)
 - Background: `Color/Grey/900` (`#111928`)

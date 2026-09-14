@@ -1,0 +1,37 @@
+[
+  {
+    "id": "role_001",
+    "name": "Admin",
+    "color": "#5865F2"
+  },
+  {
+    "id": "role_002",
+    "name": "Moderator",
+    "color": "#57F287"
+  },
+  {
+    "id": "role_003",
+    "name": "Core Member",
+    "color": "#FEE75C"
+  },
+  {
+    "id": "role_004",
+    "name": "Builder",
+    "color": "#EB459E"
+  },
+  {
+    "id": "role_005",
+    "name": "Designer",
+    "color": "#9B59B6"
+  },
+  {
+    "id": "role_006",
+    "name": "Community",
+    "color": "#3498DB"
+  },
+  {
+    "id": "role_007",
+    "name": "New Member",
+    "color": "#95A5A6"
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "ch_general",
+    "name": "general",
+    "type": "text",
+    "category": "broad",
+    "description": "Fictional #general channel."
+  },
+  {
+    "id": "ch_introductions",
+    "name": "introductions",
+    "type": "text",
+    "category": "onboarding",
+    "description": "Fictional #introductions channel."
+  },
+  {
+    "id": "ch_announcements",
+    "name": "announcements",
+    "type": "text",
+    "category": "announcement",
+    "description": "Fictional #announcements channel."
+  },
+  {
+    "id": "ch_builders",
+    "name": "builders",
+    "type": "text",
+    "category": "technical",
+    "description": "Fictional #builders channel."
+  },
+  {
+    "id": "ch_feedback",
+    "name": "feedback",
+    "type": "text",
+    "category": "discussion",
+    "description": "Fictional #feedback channel."
+  },
+  {
+    "id": "ch_product",
+    "name": "product",
+    "type": "text",
+    "category": "product",
+    "description": "Fictional #product channel."
+  },
+  {
+    "id": "ch_design",
+    "name": "design",
+    "type": "text",
+    "category": "creative",
+    "description": "Fictional #design channel."
+  },
+  {
+    "id": "ch_jobs",
+    "name": "jobs",
+    "type": "text",
+    "category": "professional",
+    "description": "Fictional #jobs channel."
+  },
+  {
+    "id": "ch_random",
+    "name": "random",
+    "type": "text",
+    "category": "social",
+    "description": "Fictional #random channel."
+  },
+  {
+    "id": "ch_memes",
+    "name": "memes",
+    "type": "text",
+    "category": "social",
+    "description": "Fictional #memes channel."
+  },
+  {
+    "id": "ch_events",
+    "name": "events",
+    "type": "text",
+    "category": "events",
+    "description": "Fictional #events channel."
+  },
+  {
+    "id": "ch_support",
+    "name": "support",
+    "type": "text",
+    "category": "support",
+    "description": "Fictional #support channel."
+  }
+]

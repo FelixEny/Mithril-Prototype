@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "purpose": "Synthetic Discord dataset for the Mithril analytics prototype.",
+  "dateRange": {
+    "start": "2024-03-05T00:54:13+01:00",
+    "end": "2024-09-07T23:59:00+01:00"
+  },
+  "entities": {
+    "community": "One community record.",
+    "members": "Members and bots. Bots must be excluded from analytics.",
+    "channels": "Text channels used by messages.",
+    "roles": "Discord-style roles.",
+    "messages": "Canonical member-generated message events.",
+    "replies": "Replies attached to messages.",
+    "reactions": "Reactions attached to messages.",
+    "voiceSessions": "Voice participation sessions."
+  },
+  "rules": [
+    "Do not hardcode dashboard metrics independently from these source events.",
+    "Derive Active Members from messages, reactions and voice participation.",
+    "Derive message metrics from member-generated messages only.",
+    "Replies are messages/interactions and should not be double-counted as a separate message source.",
+    "Retention uses the canonical 30-day definition from Mithril product documentation.",
+    "Activity tiers use the trailing 28-day window and the locked Activity Score model.",
+    "Relationships should be derived from member interactions using the meaningful-connection definition.",
+    "Trending conversations should emerge from interaction velocity/acceleration, not be manually flagged."
+  ],
+  "behavioralDesign": {
+    "superusers": "High-frequency, broad participation across multiple channels.",
+    "contributors": "Consistent participation with meaningful interaction.",
+    "regulars": "Recurring but moderate participation.",
+    "lurkers": "Light detectable participation, generally low activity.",
+    "inactive": "No qualifying activity during the 28-day activity window.",
+    "new": "Recently joined members, with a subset activating within seven days."
+  },
+  "suggestedImplementation": "Use this dataset as the canonical source of truth. Compute page metrics from these entities rather than storing separate copies of metric totals."
+}

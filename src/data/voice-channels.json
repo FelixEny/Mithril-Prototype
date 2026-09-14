@@ -1,0 +1,17 @@
+[
+  {
+    "id": "vc_001",
+    "name": "Community Hangout",
+    "type": "voice"
+  },
+  {
+    "id": "vc_002",
+    "name": "Builders Room",
+    "type": "voice"
+  },
+  {
+    "id": "vc_003",
+    "name": "Events Stage",
+    "type": "voice"
+  }
+]

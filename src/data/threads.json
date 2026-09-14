@@ -1,0 +1,100 @@
+[
+  {
+    "id": "thread_roadmap_4",
+    "channelId": "ch_product",
+    "name": "Q3 roadmap priorities",
+    "text": "Which roadmap item should the community bet on first for Q3?",
+    "last": 1786299899834
+  },
+  {
+    "id": "thread_feedback_9",
+    "channelId": "ch_feedback",
+    "name": "Onboarding friction review",
+    "text": "Where do new members hit the most friction in the onboarding flow?",
+    "last": 1786296441652
+  },
+  {
+    "id": "thread_launch_15",
+    "channelId": "ch_builders",
+    "name": "Launch-week hotfixes",
+    "text": "Tracking the hotfixes coming out of launch week — help us prioritize.",
+    "last": 1786292011039
+  },
+  {
+    "id": "thread_event_21",
+    "channelId": "ch_general",
+    "name": "Community call topics",
+    "text": "What should we cover on the upcoming community call?",
+    "last": 1786236546907
+  },
+  {
+    "id": "thread_sdk_11",
+    "channelId": "ch_builders",
+    "name": "SDK migration checklist",
+    "text": "Everything we need to sort before the SDK migration goes live.",
+    "last": 1786292038864
+  },
+  {
+    "id": "thread_types_8",
+    "channelId": "ch_builders",
+    "name": "Type-safety push",
+    "text": "Where should we invest to make the codebase safer this quarter?",
+    "last": 1786294121143
+  },
+  {
+    "id": "thread_retention_5",
+    "channelId": "ch_product",
+    "name": "Retention experiments",
+    "text": "Which retention experiments are worth running next?",
+    "last": 1786299134256
+  },
+  {
+    "id": "thread_tokens_6",
+    "channelId": "ch_design",
+    "name": "Design token audit",
+    "text": "Auditing our tokens before the dark-mode rollout — flag any oddities.",
+    "last": 1786304118599
+  },
+  {
+    "id": "thread_empty_3",
+    "channelId": "ch_design",
+    "name": "Empty states revamp",
+    "text": "Gathering ideas for better empty states across the app.",
+    "last": 1786302733227
+  },
+  {
+    "id": "thread_intros_2",
+    "channelId": "ch_introductions",
+    "name": "Member spotlights",
+    "text": "Nominations for the monthly member spotlight.",
+    "last": 1786289273174
+  },
+  {
+    "id": "thread_support_14",
+    "channelId": "ch_support",
+    "name": "Top support tickets",
+    "text": "The recurring tickets we keep seeing — what should we fix at the root?",
+    "last": 1786311975677
+  },
+  {
+    "id": "thread_events_7",
+    "channelId": "ch_events",
+    "name": "Workshop line-up",
+    "text": "Vote on the workshop topics you want to see next month.",
+    "last": 1786311645043
+  },
+  {
+    "id": "thread_memes_13",
+    "channelId": "ch_memes",
+    "name": "Best of the month",
+    "text": "Post your favorite memes from this month for the recap.",
+    "last": 1786312108849
+  },
+  {
+    "id": "thread_hack_16",
+    "channelId": "ch_builders",
+    "name": "Hackathon ideas",
+    "text": "Drop your wildest hackathon project ideas for the summer event.",
+    "last": 1786297280557
+  }
+]

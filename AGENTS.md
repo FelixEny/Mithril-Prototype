@@ -59,6 +59,8 @@ Do not hardcode data directly inside UI components.
 
 When the same entity appears across multiple screens, reuse the same underlying data. For example, a member shown in the Members page should represent the same member when shown in the Engagement or Network views.
 
+Mock data is produced deterministically by `scripts/generate-data.mjs` (run with `node scripts/generate-data.mjs`). After any generator change, verify determinism: run twice and confirm the produced JSON is byte-identical and corpus cardinality is unchanged. Note that after activity-model edits the corpus settles fully on the second run (content enrichment reads pre-retime timestamps).
+
 ## Project Documentation
 
 ### Page Specifications
@@ -104,6 +106,20 @@ Figma remains the visual source of truth.
 - Keep presentation components separate from data and business logic.
 - CardTitle is a standing rule exception: always render title on the left and the control (tabs, etc.) on the right, even when Figma stacks them. Keep the CardTitle layout unchanged regardless of the design. When CardTitle has no `action`, apply 16px top padding (`.card-title-no-action`).
 
+### Lists (dropdown menus)
+
+The list standard for dropdown/menu content. Use the `Menu`/`MenuGroup`/`MenuItem` components unless there is a reason not to.
+
+- Item text: 14px, weight 400, `--content-primary`.
+- Item padding: `6px` vertical (`--space-6px`) and `8px` horizontal (`--space-sm`); item radius 4px.
+- Items may have a leading icon (`.menu-icon`, before the label) and/or a trailing icon (`.menu-trailing`, after the label). Icons may be visible or hidden depending on the use case.
+- Item hover: background `--surface-secondary`.
+- Selected/active item: background `--surface-brand-light`, plus a check-circle icon (`.menu-check`, `--content-brand`) on the right. The check is always in the DOM and toggled `visibility` by `.selected` so item labels stay aligned.
+- Container (`.menu` frame): radius `--radius-md` (8px), 1px outside stroke `--border-modal`, shadow `--shadow-md`, padding 4px (`--space-xs`).
+- Optional group title (`.menu-group-title`): 12px, `--content-secondary`, same 6/8 padding — only for special cases via `MenuGroup`.
+- Positioning of a floating menu is per use case (e.g. `.graph-select .menu` sets `position:absolute; top:calc(100% + 6px); left:0`); the frame skin lives in the un-scoped `.menu*` rules in `styles.css`.
+- Note: the date range picker renders its preset list as borderless `.menu-item` rows (no `.menu` frame) inside the popover shell — the `Menu` frame is skipped when the popup container already provides the border.
+
 ### Design Tokens
 
 - Use the project's design tokens for colors, typography, spacing, borders, radii, and other reusable visual properties.
@@ -118,6 +134,14 @@ Figma remains the visual source of truth.
 - Keep calculations and data transformation logic separate from presentation code.
 - Prefer deterministic data so the prototype produces the same results between sessions.
 - Keep related entities consistent across the application.
+
+### Running the app
+
+- `pnpm` is not on PATH. Use `corepack pnpm <cmd>`.
+- Dev server: `corepack pnpm dev`. It serves http://localhost:5173 and binds `::1:5173`.
+- The command runner kills foreground child processes, so keep the dev server alive by launching it detached and redirecting logs:
+  `Start-Process corepack -ArgumentList pnpm,dev -WorkingDirectory <repo root> -RedirectStandardOutput <temp>\vite-out.log -RedirectStandardError <temp>\vite-err.log -WindowStyle Hidden`
+- If localhost:5173 is down: check `Get-NetTCPConnection -LocalPort 5173`; if nothing is listening, relaunch detached as above.
 
 ### Recharts (v3)
 
