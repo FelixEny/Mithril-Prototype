@@ -50,16 +50,26 @@ const float bias = 255.0 / 254.0;
 
 void main() {
   float size = a_size * u_correctionRatio / u_sizeRatio * 4.0;
-  vec2 diffVector = size * vec2(cos(a_angle), sin(a_angle));
-  vec2 position = a_position + diffVector;
-  gl_Position = vec4((u_matrix * vec3(position, 1)).xy, 0, 1);
-
-  v_diffVector = diffVector;
   v_radius = size / 2.0;
   v_textureIndex = a_textureIndex;
   v_ring = a_ring;
   v_ringWidthPx = a_ringWidth * u_correctionRatio / u_sizeRatio * 4.0;
-  v_uv = a_texture.xy + (diffVector / max(size, 0.0001) * 0.5 + 0.5) * a_texture.z;
+
+  vec2 unitDir = vec2(cos(a_angle), sin(a_angle));
+  vec2 discOffset = size * unitDir;
+  v_uv = a_texture.xy + (discOffset / max(size, 0.0001) * 0.5 + 0.5) * a_texture.z;
+
+  // The three vertices form an equilateral triangle whose inradius is half the
+  // vertex offset. Size it so the triangle fully contains the avatar disc AND
+  // the outer ring (plus its AA border), keeping the avatar radius unchanged.
+  float ringBorder = u_correctionRatio * 2.0;
+  float extra = v_ringWidthPx + ringBorder;
+  float geomSize = 2.0 * (v_radius + extra);
+  vec2 diffVector = geomSize * unitDir;
+  vec2 position = a_position + diffVector;
+  gl_Position = vec4((u_matrix * vec3(position, 1)).xy, 0, 1);
+
+  v_diffVector = diffVector;
 
   #ifdef PICKING_MODE
   v_color = a_id;
