@@ -129,16 +129,15 @@ void main(void) {
 
   vec4 frag = mix(disc, transparent, t);
 
-  // Selection / search / bridge ring drawn just outside the disc. The inner
-  // edge must fade UP from the disc interior so the ring stays an outer
-  // annulus: inside the disc avatar stays fully visible (stepping 0 at the
-  // center and ramping to 1 across the disc's own border feather), and only
-  // the thin [ringInner, ringOuter] band outside it takes the ring color.
+  // Selection / search / bridge ring drawn strictly outside the disc. Keep
+  // both antialiasing feathers inside the ring's own width so no ring alpha
+  // leaks into the avatar or the underlying triangle corners.
   if (v_ring.a > 0.001 && v_ringWidthPx > 0.0) {
     float ringInner = v_radius;
     float ringOuter = v_radius + v_ringWidthPx;
-    float inA = smoothstep(ringInner - border, ringInner, dist);
-    float outA = 1.0 - smoothstep(ringOuter - border, ringOuter, dist);
+    float ringBorder = min(border, (ringOuter - ringInner) * 0.25);
+    float inA = smoothstep(ringInner, ringInner + ringBorder, dist);
+    float outA = 1.0 - smoothstep(ringOuter - ringBorder, ringOuter, dist);
     float ringA = inA * outA * v_ring.a;
     frag.rgb = mix(frag.rgb, v_ring.rgb, ringA);
     frag.a = max(frag.a, ringA);
