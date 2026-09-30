@@ -1,12 +1,12 @@
-import { channels, conversations, endDate, members, messages, voiceSessions, type Message, type VoiceSession } from './data'
+import { channels, conversations, endDate, members, messages, presentAt, voiceSessions, type Message, type VoiceSession } from './data'
 export type RangeDays = 7 | 14 | 30 | 90
 const day = 86400000; const unique = <T,>(items: T[]) => new Set(items)
 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 export const formatNumber = (value: number) => new Intl.NumberFormat('en-US', { notation: value > 9999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
 export const formatPercent = (value: number) => `${Math.round(value)}%`
-// Heatmap intensity levels. Counts are "messages per week" for a weekday/hour
-// cell (heat is normalized by lengthDays/7), so these are absolute thresholds
-// independent of the selected range.
+// Heatmap intensity levels. Each cell holds the average for its weekday/hour
+// slot across that weekday's occurrences in the window, so these are absolute
+// thresholds independent of the selected range.
 const heatBounds = [6, 15, 30, 50, 80, 130]
 export const heatLevel = (count: number) => {
   for (let i = 0; i < heatBounds.length; i++) if (count <= heatBounds[i]) return i + 1
@@ -72,7 +72,12 @@ export function activityTiers(end: Date): Map<string, ActivityTier> {
   if (hit) return hit
   ensureIndex()
   const cutoff = new Date(endMs - 28 * day)
-  const scored = members.filter(m => !m.bot).map(m => {
+  // Only members still on the server at `end` are tiered. Someone who left is no
+  // longer part of the community's engagement mix, and counting them as
+  // Inactive would silently inflate the Inactive bar after every departure --
+  // the tier distribution would read as a decline in engagement when the roster
+  // simply shrank.
+  const scored = members.filter(m => presentAt(m, end)).map(m => {
     const own = (messagesByMember.get(m.id) ?? []).filter(x => x.at >= cutoff)
     const voice = (voiceByMember.get(m.id) ?? []).filter(x => x.at >= cutoff)
     const activeDays = unique([...own.map(x => x.at.toDateString()), ...voice.map(x => x.at.toDateString())]).size
@@ -82,6 +87,11 @@ export function activityTiers(end: Date): Map<string, ActivityTier> {
   }).sort((a, b) => b.score - a.score)
   const actives = scored.filter(x => x.activeDays > 0)
   const out = new Map<string, ActivityTier>()
+  // Members who are not on the roster at `end` are mapped to Inactive rather than
+  // omitted: consumers index the tier map by member id (MemberPopup, profile
+  // rows) and an absent key would read as "unknown tier". Callers that count
+  // members must filter on presentAt themselves.
+  for (const m of members) if (m.bot || !presentAt(m, end)) out.set(m.id, 'Inactive')
   for (const [i, m] of scored.entries()) {
     out.set(m.id, !m.activeDays ? 'Inactive' : i < Math.ceil(actives.length * .05) ? 'Superuser' : i < Math.ceil(actives.length * .2) ? 'Contributor' : m.activeDays >= 5 ? 'Regular' : 'Lurker')
   }
@@ -89,20 +99,112 @@ export function activityTiers(end: Date): Map<string, ActivityTier> {
   return out
 }
 
+// ---------------------------------------------------------------------------
+// Per-member activity snapshot for a trailing window. Segments (saved
+// filtered lists) evaluate their criteria against this so the segment engine
+// and any segment flow card share one signal source. Cached per (asOf, days).
+// ---------------------------------------------------------------------------
+export type ActivitySnapshot = { tier: ActivityTier; activeDays: number; messages: number; reactionsReceived: number; voiceMinutes: number; lastActiveAtMs: number }
+const snapshotCache = new Map<string, Map<string, ActivitySnapshot>>()
+export function activitySnapshot(asOf: Date, days = 28): Map<string, ActivitySnapshot> {
+  const asOfMs = asOf.getTime()
+  const key = `${asOfMs}:${days}`
+  const hit = snapshotCache.get(key)
+  if (hit) return hit
+  ensureIndex()
+  const cutoff = asOfMs - days * day
+  const tiers = activityTiers(asOf)
+  const out = new Map<string, ActivitySnapshot>()
+  for (const m of members) {
+    if (m.bot) continue
+    const own = (messagesByMember.get(m.id) ?? []).filter(x => x.at.getTime() >= cutoff)
+    const voice = (voiceByMember.get(m.id) ?? []).filter(x => x.at.getTime() >= cutoff)
+    const activeDays = unique([...own.map(x => x.at.toDateString()), ...voice.map(x => x.at.toDateString())]).size
+    const allEvents = eventsByMember.get(m.id)
+    out.set(m.id, {
+      tier: tiers.get(m.id) ?? 'Inactive',
+      activeDays,
+      messages: own.length,
+      reactionsReceived: own.reduce((n, x) => n + x.reactions, 0),
+      voiceMinutes: voice.reduce((n, x) => n + x.minutes, 0),
+      lastActiveAtMs: allEvents && allEvents.length ? allEvents[allEvents.length - 1] : -Infinity,
+    })
+  }
+  snapshotCache.set(key, out)
+  return out
+}
+
 export function dashboard(days: RangeDays) {
   return dashboardWindow(new Date(endDate.getTime() - days * day), endDate)
 }
-export function dashboardWindow(start: Date, end: Date) {
+export interface DashboardWindow {
+  start: Date
+  end: Date
+  current: { active: number; activeRate: number; activation: number; retention: number; messages: number; replyRate: number; reactionRate: number; voice: number; voiceMinutes: number; voiceOnly: number }
+  totalMembers: number
+  // Roster denominators. They differ because members leave mid-window:
+  // `atEnd` is the point-in-time "as of <end>" total the Overview headlines,
+  // while `inWindow` is everyone who was on the server at any point during the
+  // window -- the only denominator a participation rate can use without
+  // exceeding 100% when someone leaves after being active.
+  roster: { atEnd: number; inWindow: number }
+  joined: number
+  left: number
+  delta: { active: number; activeRate: number; activation: number; retention: number; messages: number; replyRate: number; reactionRate: number; voice: number; voiceMinutes: number }
+  activation: { activated: number; eligible: number }
+  retention: { returned: number; prior: number }
+  series: { label: string; date: string; messages: number; active: number; voice: number }[]
+  tiers: { tier: ActivityTier; value: number }[]
+  heat: { weekday: number; hour: number; count: number }[][]
+  heatActive: { weekday: number; hour: number; count: number }[][]
+  peak: { weekday: number; hour: number; count: number }
+  peaks: { weekday: number; minHour: number; maxHour: number; peak: { weekday: number; hour: number; count: number }; avg: number; sum: number; magnitude: number }[]
+  baseline: number
+  channelRows: { id: string; name: string; messages: number; active: number }[]
+  discussionRows: { id: string; channelId: string; text: string; channel: string; replies: number; reactions: number; participants: number; avatars: { id: string; name: string }[]; score: number }[]
+}
+const dashboardCache = new Map<string, DashboardWindow>()
+export function dashboardWindow(start: Date, end: Date): DashboardWindow {
+  const cacheKey = `${start.getTime()}|${end.getTime()}`
+  const hit = dashboardCache.get(cacheKey)
+  if (hit) return hit
   const lengthDays = (end.getTime() - start.getTime()) / day, previousStart = new Date(start.getTime() - lengthDays * day)
   const periodMessages = messages.filter(x => x.at >= start && x.at <= end), periodVoice = voiceSessions.filter(x => x.at >= start && x.at <= end), active = activeIds(start, end), prior = activeIds(previousStart, start)
-  const eligible = members.filter(m => !m.bot && m.joinedAt >= start && m.joinedAt <= new Date(end.getTime() - 7 * day)); const activated = eligible.filter(m => isActive(m.id, m.joinedAt, new Date(m.joinedAt.getTime() + 7 * day))).length
-  const eligiblePrior = members.filter(m => !m.bot && m.joinedAt >= previousStart && m.joinedAt <= new Date(start.getTime() - 7 * day)); const activatedPrior = eligiblePrior.filter(m => isActive(m.id, m.joinedAt, new Date(m.joinedAt.getTime() + 7 * day))).length
+  const humans = members.filter(m => !m.bot)
+  // Point-in-time roster vs window roster. A member who left during the window
+  // was still here to participate, so they count in the participation
+  // denominator but not in the "as of" total.
+  const rosterAtEnd = humans.filter(m => presentAt(m, end)).length
+  const rosterInWindow = humans.filter(m => m.joinedAt.getTime() <= end.getTime() && (m.leftAt === null || m.leftAt.getTime() > start.getTime())).length
+  const joined = humans.filter(m => m.joinedAt > start && m.joinedAt <= end).length
+  const left = humans.filter(m => m.leftAt !== null && m.leftAt > start && m.leftAt <= end).length
+  const totalMembers = rosterAtEnd
+  // Activation: only members who still existed at the end of their own 7-day
+  // window can have activated. Someone who left on day 2 never got the chance,
+  // and counting them as a failed activation would blame them for leaving.
+  const eligible = humans.filter(m => m.joinedAt >= start && m.joinedAt <= new Date(end.getTime() - 7 * day)); const activated = eligible.filter(m => presentAt(m, new Date(m.joinedAt.getTime() + 7 * day)) && isActive(m.id, m.joinedAt, new Date(m.joinedAt.getTime() + 7 * day))).length
+  const eligiblePrior = humans.filter(m => m.joinedAt >= previousStart && m.joinedAt <= new Date(start.getTime() - 7 * day)); const activatedPrior = eligiblePrior.filter(m => presentAt(m, new Date(m.joinedAt.getTime() + 7 * day)) && isActive(m.id, m.joinedAt, new Date(m.joinedAt.getTime() + 7 * day))).length
   const prior2 = activeIds(new Date(previousStart.getTime() - lengthDays * day), previousStart)
-  const voiceIds = unique(periodVoice.map(x => x.memberId)), messageIds = unique(periodMessages.map(x => x.memberId)), totalMembers = members.filter(x => !x.bot).length
-  const activeRate = active.size / totalMembers * 100, priorRate = prior.size / totalMembers * 100, activationRate = eligible.length ? activated / eligible.length * 100 : 0, priorActivation = eligiblePrior.length ? activatedPrior / eligiblePrior.length * 100 : 0, retentionRate = prior.size ? [...prior].filter(id => active.has(id)).length / prior.size * 100 : 0, priorRetention = prior2.size ? [...prior2].filter(id => prior.has(id)).length / prior2.size * 100 : retentionRate, returned = [...prior].filter(id => active.has(id)).length
+  const voiceIds = unique(periodVoice.map(x => x.memberId)), messageIds = unique(periodMessages.map(x => x.memberId))
+  // Retention denominator: active in the prior window AND still on the roster at
+  // this window's start. Someone who has since left is churn, not a
+  // non-returner — the Overview reports those separately under Left, and mixing
+  // the two would let one member count as both a departure and a retention loss.
+  const memberById = new Map(members.map(m => [m.id, m]))
+  const priorOnRoster = new Set([...prior].filter(id => { const m = memberById.get(id); return m !== undefined && presentAt(m, start) }))
+  const prior2OnRoster = new Set([...prior2].filter(id => { const m = memberById.get(id); return m !== undefined && presentAt(m, previousStart) }))
+  const activeRate = rosterInWindow ? active.size / rosterInWindow * 100 : 0, priorRate = rosterInWindow ? prior.size / rosterInWindow * 100 : 0, activationRate = eligible.length ? activated / eligible.length * 100 : 0, priorActivation = eligiblePrior.length ? activatedPrior / eligiblePrior.length * 100 : 0
+  const returnedIds = [...priorOnRoster].filter(id => active.has(id))
+  const retentionRate = priorOnRoster.size ? returnedIds.length / priorOnRoster.size * 100 : 0, priorRetention = prior2OnRoster.size ? [...prior2OnRoster].filter(id => priorOnRoster.has(id)).length / prior2OnRoster.size * 100 : retentionRate, returned = returnedIds.length
   const current = { active: active.size, activeRate, activation: activationRate, retention: retentionRate, messages: periodMessages.length, replyRate: periodMessages.filter(x => x.hasReply).length / Math.max(1, periodMessages.length) * 100, reactionRate: periodMessages.filter(x => x.reactions > 0).length / Math.max(1, periodMessages.length) * 100, voice: voiceIds.size, voiceMinutes: periodVoice.reduce((n, x) => n + x.minutes, 0), voiceOnly: [...voiceIds].filter(x => !messageIds.has(x)).length }
   const visibleDays = Math.min(Math.round(lengthDays), 30); const series = Array.from({ length: visibleDays }, (_, i) => { const s = new Date(end.getTime() - (visibleDays - i) * day), e = new Date(s.getTime() + day), rows = periodMessages.filter(x => x.at >= s && x.at < e); return { label: `${s.getUTCMonth()+1}/${s.getUTCDate()}`, date: `${monthNames[s.getUTCMonth()]} ${s.getUTCDate()}, ${s.getUTCFullYear()}`, messages: rows.length, active: activeIds(s, e).size, voice: unique(periodVoice.filter(x => x.at >= s && x.at < e).map(x => x.memberId)).size } })
-  const tierMap = activityTiers(end); const tiers = TIERS.map(tier => ({ tier, value: [...tierMap.values()].filter(t => t === tier).length }))
+  // Counted over the members on the roster at `end` only. activityTiers maps
+  // departed members to 'Inactive' so per-id lookups always resolve, but
+  // counting that map's values verbatim would file every leaver under Inactive and
+  // make the tier distribution read as an engagement collapse after each
+  // departure wave. The tier bars describe who is here now, so they sum to
+  // rosterAtEnd rather than to every member who ever joined.
+  const tierMap = activityTiers(end); const tiers = TIERS.map(tier => ({ tier, value: humans.filter(m => presentAt(m, end) && tierMap.get(m.id) === tier).length }))
   // Per-weekday occurrence counts in [start, end]: a window rarely holds whole
   // weeks (30d covers Sun/Mon 5x but Tue-Sat 4x; custom ranges vary more), so
   // each weekday row is divided by its own occurrence count rather than a
@@ -124,5 +226,7 @@ export function dashboardWindow(start: Date, end: Date) {
   const discussionRows = conversations.map(c => { const items = periodMessages.filter(x => x.conversationId === c.id), recent = items.filter(x => x.at >= new Date(end.getTime()-3*3600000)), priorItems = items.filter(x => x.at >= new Date(end.getTime()-27*3600000) && x.at < new Date(end.getTime()-3*3600000)), velocity = recent.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(recent.map(x=>x.memberId)).size, baseline = (priorItems.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(priorItems.map(x=>x.memberId)).size)/8, avatars = [...recent].sort((a,b)=>b.at.getTime()-a.at.getTime()).reduce((map,x)=>map.has(x.memberId)?map:map.set(x.memberId,(members.find(m=>m.id===x.memberId)?.name ?? x.memberId)),new Map<string,string>()); return { ...c, channel: channels.find(x=>x.id===c.channelId)!.name, replies: recent.filter(x=>x.hasReply).length, reactions: recent.reduce((n,x)=>n+x.reactions,0), participants: unique(recent.map(x=>x.memberId)).size, avatars: [...avatars].slice(0,3).map(([id,name])=>({id,name})), score: velocity / (baseline || 1) } }).sort((a,b)=>b.score-a.score)
   const priorMessages = messages.filter(x => x.at >= previousStart && x.at < start), priorVoice = voiceSessions.filter(x => x.at >= previousStart && x.at < start), priorReplyRate = priorMessages.filter(x => x.hasReply).length / Math.max(1, priorMessages.length) * 100, priorReactionRate = priorMessages.filter(x => x.reactions > 0).length / Math.max(1, priorMessages.length) * 100, priorVoiceIds = unique(priorVoice.map(x => x.memberId)).size, priorVoiceMinutes = priorVoice.reduce((n, x) => n + x.minutes, 0)
   const delta = { active: prior.size ? (active.size - prior.size) / prior.size * 100 : 0, activeRate: activeRate - priorRate, activation: activationRate - priorActivation, retention: retentionRate - priorRetention, messages: priorMessages.length ? (periodMessages.length - priorMessages.length) / priorMessages.length * 100 : 0, replyRate: current.replyRate - priorReplyRate, reactionRate: current.reactionRate - priorReactionRate, voice: priorVoiceIds ? (voiceIds.size - priorVoiceIds) / priorVoiceIds * 100 : 0, voiceMinutes: priorVoiceMinutes ? (current.voiceMinutes - priorVoiceMinutes) / priorVoiceMinutes * 100 : 0 }
-  return { start, end, current, totalMembers, delta, activation: { activated, eligible: eligible.length }, retention: { returned, prior: prior.size }, series, tiers, heat, heatActive, peak, peaks, baseline, channelRows, discussionRows }
+  const result = { start, end, current, totalMembers, roster: { atEnd: rosterAtEnd, inWindow: rosterInWindow }, joined, left, delta, activation: { activated, eligible: eligible.length }, retention: { returned, prior: priorOnRoster.size }, series, tiers, heat, heatActive, peak, peaks, baseline, channelRows, discussionRows }
+  dashboardCache.set(cacheKey, result)
+  return result
 }

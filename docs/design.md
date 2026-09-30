@@ -37,7 +37,7 @@ The design tokens are the implementation system. Figma is the visual reference.
 - 600: `#4B5563`
 - 500: `#6B7280`
 - 400: `#8E96A4`
-- 300: `#D1D5DB`
+- 300: `#C6CBD2`
 - 200: `#ECEDEE`
 - 100: `#F0F2F4`
 - 50: `#F9F9F9`
@@ -114,7 +114,7 @@ System colors used for avatar tinting (initials circles, graph nodes, Dicebear b
 - Contributor: `Color/Special/Green`
 - Regular: `Color/Special/Blue`
 - Lurkers: `Color/Special/Yellow`
-- Inactive: `Color/Special/Grayish Green`
+- Inactive: `Color/Grey/300`
 - Brand: `Color/Brand/200`
 - BrandMid: `Color/Brand/100`
 - BrandLight: `Color/Brand/50`
@@ -141,7 +141,7 @@ System colors used for avatar tinting (initials circles, graph nodes, Dicebear b
 
 #### Tooltip (chart)
 - Background: `Color/Grey/900` (`#111928`)
-- Label: `Color/Grey/300` (`#D1D5DB`)
+- Label: `Color/Grey/300` (`#C6CBD2`)
 - Value: `Color/Grey/0` (`#FFFFFF`)
 
 ## Corner Radius
@@ -237,12 +237,13 @@ Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS 
 
 # Shadows
 
-- `shadow-xs`: `0 1px 2px 0 rgba(0, 0, 0, 0.04)`
-- `shadow-sm`: `0 1px 2px 0 rgba(0, 0, 0, 0.08)`
-- `shadow`: `0 1px 3px 0 rgba(0, 0, 0, 0.10), 0 1px 2px -1px rgba(0, 0, 0, 0.10)`
-- `shadow-md`: `0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.05)`
-- `shadow-lg`: `0 10px 15px -3px rgba(0, 0, 0, 0.10), 0 4px 6px 0 rgba(0, 0, 0, 0.05)`
-- `shadow-in`: `0 0 4px 0 rgba(0, 0, 0, 0.08) inset`
+Elevation model: resting (in-flow) surfaces never cast shadows. Cards, panels, inputs, buttons, tabs, and table wrappers are separated by opaque hairline strokes (`--border-primary`) or canvas contrast only. Shadows are reserved for detached/floating surfaces (menus, popovers, dialogs, tooltips, floating bars) and for a spread halo that marks an active/focused input.
+
+Stroke↔shadow split: flat components use `border: 1px solid var(--border-primary)` (opaque). White floating surfaces (`.menu`, `.dc-popover`, `.seg-dialog`, `.member-popup`, `.graph-zoom`) render their hairline as an outside ring — `box-shadow: 0 0 0 1px var(--border-modal), <overlay shadow>` — so the `--border-modal` (8% alpha) stroke sits outside the box instead of shrinking it. Dark floating surfaces (tooltips, `--seg-bar`) are shadow-only, no stroke.
+
+- `shadow-overlay`: `0 2px 6px -2px rgba(17, 25, 40, 0.10), 0 16px 32px -8px rgba(17, 25, 40, 0.12)` — menus, dropdown popovers, dialogs, tooltips, zoom cluster, date-picker popover. Two-layer contact + ambient.
+- `shadow-overlay-strong`: `0 6px 16px -6px rgba(17, 25, 40, 0.12), 0 24px 48px -12px rgba(17, 25, 40, 0.18)` — the large floating segment actions bar and the member popup.
+- `ring`: `0 0 0 3px rgba(17, 25, 40, 0.08)` — spread halo shown while an input or trigger is focused/active (`.date-control:focus-within`, `.people-search:focus-within`, `.seg-input:focus`, `.pp-stepper input:focus`, `.graph-select:focus-within>button`, `.people-select:focus-within>button`, `.seg-select:focus-within .seg-select-btn`, `.graph-search:focus-within`, `.graph-filter-btn:focus-visible`, `.graph-filter-btn[aria-expanded="true"]`). Typing inputs pair the halo with a brand stroke on focus (`border-color: var(--content-brand)`).
 
 # Token Usage Rules
 

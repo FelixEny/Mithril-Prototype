@@ -1,4 +1,4 @@
-import { members, messages, replies, reactions, type Member } from './data'
+import { endDate, members, messages, presentAt, replies, reactions, type Member } from './data'
 
 export type StrengthLabel = 'strong' | 'mid' | 'weak'
 
@@ -34,6 +34,7 @@ export interface RelationshipMix {
 export interface MemberRelInfo {
   memberId: string
   name: string
+  username: string | null
   degree: number
   mix: RelationshipMix
   lastActive: number
@@ -107,22 +108,29 @@ interface BaseData {
   humans: Member[]
   humanSet: Set<string>
   memberName: Map<string, string>
+  memberUsername: Map<string, string | null>
   memberJoined: Map<string, number>
   msgAuthor: Map<string, string>
 }
 let baseCache: BaseData | null = null
 function ensureBase(): BaseData {
   if (baseCache) return baseCache
-  const humans = members.filter((m) => !m.bot)
+  // Network stats describe the community as it stands at the end of the data
+  // window, so members who have left are excluded from the denominator. Leaving
+  // them in would report a "less connected" population that includes people no
+  // longer on the server, understating connectivity as the roster churns.
+  const humans = members.filter((m) => presentAt(m, endDate))
   const humanSet = new Set(humans.map((m) => m.id))
   const memberName = new Map<string, string>()
+  const memberUsername = new Map<string, string | null>()
   const memberJoined = new Map<string, number>()
   for (const m of humans) {
     memberName.set(m.id, m.name)
+    memberUsername.set(m.id, m.username ?? null)
     memberJoined.set(m.id, m.joinedAt.getTime())
   }
   const msgAuthor = new Map(messages.map((m) => [m.id, m.memberId]))
-  return (baseCache = { humans, humanSet, memberName, memberJoined, msgAuthor })
+  return (baseCache = { humans, humanSet, memberName, memberUsername, memberJoined, msgAuthor })
 }
 
 const PARTICIPATION_PORTION = 0.25
@@ -457,8 +465,40 @@ export function selectBackbone(rel: RelationshipsData, filters: { cluster: numbe
 
 const cache = new Map<string, RelationshipsData>()
 
+// Influence Score is defined over a fixed trailing window matching the
+// activity-level tier window (28 days from data end), so the same member always
+// reads the same score on the People table, the Top influencers card and the
+// member popup regardless of the page's date-range picker.
+export const INFLUENCE_DAYS = 28
+
+export type InfluenceComponentKey = 'reach' | 'quality' | 'activity'
+
+// Single source of truth for the Influence Score decomposition. `weight` is the
+// factor applied to each 0-100 component in the score. Note that reach and
+// activity are normalised against the community max, so they are relative
+// measures; quality is an absolute average of the edge weights.
+export const INFLUENCE_COMPONENTS: { key: InfluenceComponentKey; label: string; weight: number }[] = [
+  { key: 'reach', label: 'Reach', weight: 0.4 },
+  { key: 'quality', label: 'Relationship quality', weight: 0.4 },
+  { key: 'activity', label: 'Activity', weight: 0.2 },
+]
+
+// Weighted contributions sum to the score, and their maxima sum to 100, so the
+// member popup can render the make-up as a single stacked bar.
+export const influenceOf = (parts: Record<InfluenceComponentKey, number>) =>
+  INFLUENCE_COMPONENTS.reduce((sum, c) => sum + c.weight * parts[c.key], 0)
+
+let influenceEngineData: RelationshipsData | null = null
+export function influenceEngine(): RelationshipsData {
+  if (!influenceEngineData) {
+    const end = endDate.getTime()
+    influenceEngineData = relationships(end - INFLUENCE_DAYS * DAY, end)
+  }
+  return influenceEngineData
+}
+
 export function relationships(start: number, end: number): RelationshipsData {
-  const { humans, memberName, memberJoined } = ensureBase()
+  const { humans, memberName, memberUsername, memberJoined } = ensureBase()
   const key = `${start}|${end}`
   const hit = cache.get(key)
   if (hit) return hit
@@ -519,6 +559,7 @@ export function relationships(start: number, end: number): RelationshipsData {
     memberInfo.set(id, {
       memberId: id,
       name: memberName.get(id) ?? id,
+      username: memberUsername.get(id) ?? null,
       degree: degreeId.get(id) ?? 0,
       mix: { strong, mid, weak },
       lastActive: core.lastSeen.get(id) ?? Number.NaN,
@@ -527,7 +568,7 @@ export function relationships(start: number, end: number): RelationshipsData {
       reachCount: reachCount.get(id) ?? 0,
       quality,
       activity,
-      influence: 0.4 * reach + 0.4 * quality + 0.2 * activity,
+      influence: influenceOf({ reach, quality, activity }),
       bridge: core.bridges.has(id),
       clusterId: core.memberCluster.get(id) ?? -1,
       mostConnected: mostSet.has(id),

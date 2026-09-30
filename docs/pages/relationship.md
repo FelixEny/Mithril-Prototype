@@ -251,12 +251,20 @@ Reach =
 
 **Definition**
 
-Influence Score is a **0–100 score** measuring an individual's influence within the community.
+Influence Score is a **0–100 score** measuring an individual's influence over the **trailing 28 days** — the same window as the Activity level tier.
 
 It answers a different question from Community Strength.
 
 - Community Strength asks: **How healthy is the community's social network?**
 - Influence Score asks: **How influential is this individual within that network?**
+
+Influence is **pinned to the trailing 28 days from the data end**, independent
+of the page's date-range picker, so the same member reads the same score on the
+Relationships page, the People table and the member popup. It is computed by a
+single shared engine (`relationships.influenceEngine()`, `INFLUENCE_DAYS = 28`); the
+picker only shapes the graph itself (edges, clusters, strength, popup
+connections/mix). Members with no qualifying network edges in the trailing 28
+days fall back to a small activity-derived score (see `people.ts`).
 
 ### Calculation
 
@@ -282,6 +290,51 @@ How strong the member's meaningful relationships are.
 **Activity — 20%**
 
 How actively the member participates in the community.
+
+### Component weights and definitions
+
+`INFLUENCE_COMPONENTS` in `relationships.ts` is the single source of truth for the
+weights. The score itself is computed via `influenceOf()`, which reads those same
+weights, so the score and the member popup's breakdown can never drift apart.
+
+**Reach and activity are normalised against the community maximum** (they are
+expressed as a percentage of the most-reached / most active member), whereas
+relationship quality is an absolute 0–100 average of the edge weights. This
+caveat is documented here rather than surfaced in the popup, which carries no
+explainer.
+
+### Member popup
+
+The member popup decomposes the score as a stacked bar plus one row per component,
+read as `contribution / maximum` (e.g. `34 / 40`). The rows sum to the headline score.
+When all three components are 0, the rows are replaced by a short empty-state note.
+
+The popup spans the height of the graph's grey area (8px inset on top, right and
+bottom). The header is pinned and the remaining content scrolls in `.mp-body`. Its
+summary stats are **Activity level** (rendered with `TierPill`) and **Cluster**
+(`Cluster {n}`, or `—` when the member is unclustered).
+
+**Top connections** lists the three strongest relationships for the selected
+member, ranked by `RelationshipEdge.score` with the member id as a deterministic
+tiebreak. They are read from the same `data.edges` as the graph and the
+Relationship mix bar directly above them, so all three agree for the visible
+range. Each row shows the strength dot, avatar, name and explicit
+Strong / Moderate / Weak label; with no edges the section shows a short
+empty-state note.
+
+> **Deviation from Figma:** the popup is **320px** wide, not the **280px** specified by
+> node `896:53644` in file `leSvcL6Q3iSadrTYzarsy0`. The extra width accommodates the
+> component breakdown. The stacked bar and the gapped relationship-mix segments
+> (4px gap, 2px radius) follow the design; Figma has no component breakdown, so that
+> part is net-new.
+
+### Total links and selection
+
+The graph's **Total links** metric is context-sensitive. With no member selected it
+reports the community figure with its period-over-period `Change` and an explanatory
+tooltip. While a member is selected it reports that member's own degree, labelled
+`{name} — total links`, and both the `Change` and the tooltip are dropped because
+they describe the community rather than the individual.
 
 ---
 

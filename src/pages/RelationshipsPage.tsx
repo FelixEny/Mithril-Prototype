@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CaretDown, CaretRight, Fire, FunnelSimple, Graph, Info, MagnifyingGlass, UsersFour, X } from '@phosphor-icons/react'
+import { ArrowsIn, ArrowsOut, CaretDown, CaretRight, Fire, FunnelSimple, Graph, Info, MagnifyingGlass, UsersFour, X } from '@phosphor-icons/react'
 import { PageHeader } from '../components/PageHeader'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { Card } from '../components/Card'
@@ -15,8 +15,8 @@ import { metricInfo } from '../help'
 import { endDate } from '../data'
 import { getMemberAvatar } from '../avatars'
 import { formatNumber } from '../analytics'
-import { relationships, selectBackbone } from '../relationships'
-import { FILTER_OPTIONS, NetworkGraph, type GraphFilter, type MemberFilter } from '../components/NetworkGraph'
+import { relationships, influenceEngine } from '../relationships'
+import { FILTER_OPTIONS, NetworkGraph, type GraphFilter, type MemberFilter, type NetworkGraphHandle } from '../components/NetworkGraph'
 import type { RangeProps } from './EngagementPage'
 
 const DAY = 86400000
@@ -29,18 +29,56 @@ const DIMENSIONS: { label: string; key: 'connectedness' | 'participation' | 'dis
 ]
 const weightsMeta = `Weights · ${DIMENSIONS.map((d) => `${d.label} ${Math.round(d.w * 100)}%`).join(' · ')}`
 
-export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange }: RangeProps) {
+export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange, active = true }: RangeProps & { active?: boolean }) {
   const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / DAY)) : range
   const rel = useMemo(() => {
     const end = custom ? custom.to.getTime() : endDate.getTime()
     const start = custom ? custom.from.getTime() : end - range * DAY
     return relationships(start, end)
   }, [range, custom])
+
+  // Influence Score is pinned to the shared 28-day engine (matching the
+  // activity-level window) so People, this card and the member popup agree.
+  // The "connections" sublabel reflects the visible graph window via rel.degree.
+  const influencers = useMemo(() => influenceEngine().influencers.slice(0, 5), [])
   const score = Math.round(rel.strength)
   const [filter, setFilter] = useState<GraphFilter>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [memberFilter, setMemberFilter] = useState<MemberFilter>({ cluster: null, minDegree: null })
   const [search, setSearch] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+  const graphRef = useRef<NetworkGraphHandle>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const [popOpen, setPopOpen] = useState(false)
+  const [popMatches, setPopMatches] = useState<{ id: string; name: string; username: string | null; clusterId: number; degree: number }[]>([])
+
+  useEffect(() => {
+    if (search.trim() === '') {
+      setPopOpen(false)
+      setPopMatches([])
+      return
+    }
+    setPopMatches((graphRef.current?.matches() ?? []).slice(0, 8))
+    setPopOpen(true)
+  }, [search])
+
+  useEffect(() => {
+    if (!popOpen) return
+    const close = (e: MouseEvent) => { if (popRef.current && !popRef.current.contains(e.target as Node)) setPopOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [popOpen])
+
+  const pickMatch = (id: string) => {
+    setSelected(id)
+    graphRef.current?.flyTo(id)
+    setPopOpen(false)
+  }
+
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') setPopOpen(false)
+    if (e.key === 'Enter' && popMatches.length > 0) pickMatch(popMatches[0].id)
+  }
 
   const [menuOpen, setMenuOpen] = useState(false)
   const selectRef = useRef<HTMLDivElement>(null)
@@ -54,6 +92,19 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   const [filterOpen, setFilterOpen] = useState(false)
   const [flowSub, setFlowSub] = useState<null | 'conn' | 'clusters'>(null)
   const flowRef = useRef<HTMLDivElement>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
+  }, [fullscreen])
+  // Page stays mounted across navigation; exit fullscreen (and restore body
+  // overflow) the moment the graph is no longer the active page.
+  useEffect(() => { if (!active) setFullscreen(false) }, [active])
   useEffect(() => {
     if (!filterOpen) return
     const close = (e: MouseEvent) => { if (flowRef.current && !flowRef.current.contains(e.target as Node)) { setFilterOpen(false); setFlowSub(null) } }
@@ -87,13 +138,13 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
     return true
   }
 
-  const baseIds = useMemo(() => selectBackbone(rel, memberFilter), [rel, memberFilter])
-
   const clearSelection = () => { setSelected(null); setFilter('all') }
 
   const handleSelect = (id: string | null) => {
     if (id === null) { clearSelection(); return }
     if (!memVisible(id, memberFilter)) return
+    // Click preserves the hover/focus view: no camera move, the ego-focus
+    // reducers keep the member and its connections lit while the popup opens.
     setSelected(id)
   }
 
@@ -119,6 +170,10 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   const lessPct = priorLess > 0 ? (-rel.connectedDelta / priorLess) * 100 : 0
   const priorAvg = rel.avgConnections - rel.avgConnectionsDelta
   const avgPct = priorAvg > 0 ? (rel.avgConnectionsDelta / priorAvg) * 100 : 0
+  // With a member selected, the metric reports that member's own degree instead
+  // of the community total. The Change and tooltip are community-scoped, so both
+  // are dropped while a selection is active.
+  const selInfo = selected ? rel.memberInfo.get(selected) : undefined
   const sortedDegrees = [...rel.degree.values()].sort((a, b) => b - a)
   const topSlice = sortedDegrees.slice(0, Math.max(1, Math.ceil(sortedDegrees.length * 0.1)))
   const degreeSum = sortedDegrees.reduce((a, x) => a + x, 0)
@@ -129,7 +184,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   return <>
     <PageHeader title="Relationships" subtitle="Understand how members connect, influence and bridge your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
     <Card className="strength-card">
-      <CardTitle title="Community strength" className="metrics-title" action={<span className="strength-meta">{weightsMeta}</span>} />
+      <CardTitle title="Community strength" className="metrics-title" action={<span className="card-title-meta">{weightsMeta}</span>} />
       <div className="strength-body">
         <div className="strength-gauge">
           <Gauge value={score}>
@@ -158,15 +213,14 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
         {DIMENSIONS.map((d) => <div className="strength-foot-row" key={d.label}><b>{d.label}:</b><span>{d.def}</span></div>)}
       </div>
     </Card>
-    <Card className="graph-card">
+    <Card className={fullscreen ? 'graph-card fullscreen' : 'graph-card'}>
       <div className="graph-head">
         <div className="graph-stat">
-          <Label text="Total links" info={metricInfo['Total links']} />
-          <div className="graph-stat-row"><b>{formatNumber(rel.totalLinks)}</b><Change v={linksPct} range={effDays} /></div>
+          {selInfo
+            ? <><span className="stat-title graph-stat-member">{selInfo.name} — total links</span><div className="graph-stat-row"><b>{formatNumber(selInfo.degree)}</b></div></>
+            : <><Label text="Total links" info={metricInfo['Total links']} /><div className="graph-stat-row"><b>{formatNumber(rel.totalLinks)}</b><Change v={linksPct} range={effDays} /></div></>}
         </div>
         <div className="graph-controls">
-          {memberFilter.cluster !== null && <span className="filter-pill pill-tag"><i className="pill-icon"><UsersFour size={20} /></i><span className="pill-label">Cluster {memberFilter.cluster + 1}</span><button aria-label="Clear cluster filter" onClick={() => applyCluster(null)}><X size={16} /></button></span>}
-          {memberFilter.minDegree !== null && <span className="filter-pill pill-tag"><i className="pill-icon"><Graph size={20} /></i><span className="pill-label">{memberFilter.minDegree}+ connections</span><button aria-label="Clear connections filter" onClick={() => applyConn(null)}><X size={16} /></button></span>}
           {selected && <div className="graph-select" ref={selectRef}>
             <button onClick={() => setMenuOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={menuOpen}>{activeLabel}<CaretDown size={16} /></button>
             {menuOpen && <Menu>{FILTER_OPTIONS.map((o) => <MenuItem key={o.v} label={o.label} selected={o.v === filter} onSelect={() => { setFilter(o.v); setMenuOpen(false) }} />)}</Menu>}
@@ -175,25 +229,48 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
             <button className="graph-filter-btn" aria-expanded={filterOpen} onClick={() => { setFilterOpen((o) => !o); setFlowSub(null) }}><FunnelSimple size={16} />Filter</button>
             {filterOpen && <div className="menu graph-filter-menu">
               <div className="menu-sub-row" onMouseEnter={() => setFlowSub('conn')}>
-                <span className="menu-label">No. of connections</span><CaretRight size={14} className="caret" />
+                <i className="menu-sub-icon"><Graph size={16} /></i><span className="menu-label">No. of connections</span><CaretRight size={14} className="caret" />
                 {flowSub === 'conn' && <div className="menu menu-sub">
-                  <MenuItem label="Entire network" selected={memberFilter.minDegree === null} onSelect={() => applyConn(null)} />
                   {connLevels.map((l) => <MenuItem key={l} label={`${l}+ connections`} selected={memberFilter.minDegree === l} onSelect={() => applyConn(l)} />)}
-                  <MenuItem label="Custom" className="menu-item-disabled" />
+                  <MenuItem label="Custom" disabled />
                 </div>}
               </div>
               <div className="menu-sub-row" onMouseEnter={() => setFlowSub('clusters')}>
-                <span className="menu-label">Clusters</span><CaretRight size={14} className="caret" />
+                <i className="menu-sub-icon"><UsersFour size={16} /></i><span className="menu-label">Clusters</span><CaretRight size={14} className="caret" />
                 {flowSub === 'clusters' && <div className="menu menu-sub">
                   {rel.clusters.map((c) => <MenuItem key={c.id} label={`Cluster ${c.id + 1}`} selected={memberFilter.cluster === c.id} onSelect={() => applyCluster(c.id)} />)}
                 </div>}
               </div>
             </div>}
           </div>
-          <div className="graph-search"><MagnifyingGlass size={16} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by username" aria-label="Search by username" /></div>
+          <div className="graph-search" ref={popRef}>
+            <MagnifyingGlass size={16} /><input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={onSearchKeyDown} onFocus={() => { if (search.trim() !== '') setPopOpen(true) }} placeholder="Search by username" aria-label="Search by username" />{search !== '' && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => { setSearch(''); searchRef.current?.focus() }}><X size={16} /></button>}
+            {popOpen && search.trim() !== '' && (
+              <Menu className="graph-search-menu" role="listbox">
+                {popMatches.length === 0 && <MenuItem label="No members found" disabled />}
+                {popMatches.map((m) => (
+                  <MenuItem key={m.id} label={
+                    <span className="search-match">
+                      <Avatar spec={getMemberAvatar(m.id)} name={m.name} size={24} />
+                      <span className="search-match-text"><span className="search-match-name">{m.name}</span>
+                        {m.username && <span className="search-match-user">@{m.username}</span>}
+                      </span>
+                      {m.clusterId >= 0 && <span className="search-match-cluster">Cluster {m.clusterId + 1}</span>}
+                      <span className="search-match-deg">{formatNumber(m.degree)} connections</span>
+                    </span>
+                  } onSelect={() => pickMatch(m.id)} />
+                ))}
+              </Menu>
+            )}
+          </div>
+          <button className="graph-fullscreen-btn" aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreen} onClick={() => setFullscreen((f) => !f)}>{fullscreen ? <ArrowsIn size={16} /> : <ArrowsOut size={16} />}</button>
         </div>
       </div>
-      <NetworkGraph data={rel} filter={filter} search={search} selected={selected} onSelect={handleSelect} memberFilter={memberFilter} baseIds={baseIds} />
+      <div className="graph-filters">
+        {memberFilter.cluster !== null && <span className="filter-pill">Cluster {memberFilter.cluster + 1}<button aria-label="Clear cluster filter" onClick={() => applyCluster(null)}><X size={16} /></button></span>}
+        {memberFilter.minDegree !== null && <span className="filter-pill">{memberFilter.minDegree}+ connections<button aria-label="Clear connections filter" onClick={() => applyConn(null)}><X size={16} /></button></span>}
+      </div>
+      <NetworkGraph ref={graphRef} data={rel} filter={filter} search={search} selected={selected} onSelect={handleSelect} memberFilter={memberFilter} />
     </Card>
     <Card className="metrics">
       <CardTitle title="Network summary" className="metrics-title" />
@@ -213,22 +290,25 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
             const max = Math.max(1, ...rel.buckets.map((b) => b.count))
             return rel.buckets.map((b) => (
               <div className="dist-row" key={b.label}>
-                <div className="dist-label"><span>{b.label} Connections</span><span className="dist-count"><b>{formatNumber(b.count)}</b><span>({Math.round((b.count / rel.totalMembers) * 100)}%)</span></span></div>
-                <div className="dist-bar"><i style={{ width: `${(b.count / max) * 100}%` }} /></div>
+                <div className="dist-label"><span>{b.label} Connections</span></div>
+                <div className="dist-bar-row">
+                  <div className="dist-bar"><i style={{ width: `${(b.count / max) * 100}%` }} /></div>
+                  <div className="dist-count"><b>{formatNumber(b.count)}</b><span>({Math.round((b.count / rel.totalMembers) * 100)}%)</span></div>
+                </div>
               </div>
             ))
           })()}
         </div>
         <div className="dist-foot">Buckets adapt based on community size</div>
       </Card>
-      <Card>
+      <Card className="inf-card">
         <CardTitle title="Top influencers" className="card-title-gap-xs" action={<span className="info-tip" tabIndex={0}><Info size={16} /><span className="tip" role="tooltip"><span className="tip-title">What does this mean?</span><span className="tip-body">{metricInfo['Top influencers']}</span></span></span>} />
         <div className="inf-head"><span>Member name</span><span>Influence score</span></div>
-        {rel.influencers.slice(0, 5).map((inf, i) => (
+        {influencers.map((inf, i) => (
           <div className="inf-row" key={inf.memberId}>
             <span className="inf-rank">{i + 1}</span>
-            <span className="inf-id"><Avatar spec={getMemberAvatar(inf.memberId)} name={inf.name} size={32} /><span className="inf-names"><span className="inf-name">{inf.name}</span><span className="inf-sub">{formatNumber(inf.connections)} connections</span></span></span>
-            <span className="inf-score"><Fire size={20} weight="fill" /><b>{Math.round(inf.influence)}</b></span>
+            <span className="inf-id"><Avatar spec={getMemberAvatar(inf.memberId)} name={inf.name} size={32} /><span className="inf-names"><span className="inf-name">{inf.name}</span><span className="inf-sub">{formatNumber(rel.degree.get(inf.memberId) ?? 0)} connections</span></span></span>
+            <span className="inf-score"><Fire size={16} /><b>{Math.round(inf.influence)}</b></span>
           </div>
         ))}
       </Card>

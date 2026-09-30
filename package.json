@@ -10,10 +10,12 @@
 	},
 	"dependencies": {
 		"@phosphor-icons/react": "^2.1.10",
+		"graphology": "^0.26.0",
 		"react": "^19.2.8",
 		"react-day-picker": "^10.0.1",
 		"react-dom": "^19.2.8",
-		"recharts": "^3.10.1"
+		"recharts": "^3.10.1",
+		"sigma": "^3.0.3"
 	},
 	"devDependencies": {
 		"@types/react": "^19.2.18",

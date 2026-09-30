@@ -15,10 +15,12 @@ Engagement answers four questions:
 
 - The date picker controls the reporting period for period-based metrics and charts.
 - Bots are excluded from member analytics.
+- Members can leave the server. Every member-facing count is evaluated against the roster at a specific point in time: a member who left on 20 Aug is on the roster through 20 Aug and gone from 21 Aug. "Total members" style totals are point-in-time (as of the period end), while participation rates use the window roster described below.
+- New Member Activation excludes members who left before completing their 7-day activation window, and Retention counts only members still on the roster at the start of the period. Departures are reported separately as churn rather than being folded into retention, so one member is never counted as both a departure and a retention loss.
 - Active Members includes message, reaction, and voice participation.
 - Member-generated messages are used for message metrics. Replies are messages and are included.
 - The Engagement page uses one canonical 30-day retention definition.
-- Activity tiers use a trailing 28-day window.
+- Activity tiers use a trailing 28-day window, so the tier distribution is period-independent and does not change with the date range (see section 9).
 - Voice is included in activity/active-member definitions but is not converted into an artificial message equivalent.
 
 ## 3. Top-level participation metrics
@@ -26,7 +28,7 @@ Engagement answers four questions:
 | Metric | Definition / calculation | Notes |
 | --- | --- | --- |
 | **Active Members** | Unique members who performed at least one qualifying activity during the selected period. | Qualifying activity: sent a message, added a reaction, or participated in voice. |
-| **Active Member Rate** | Active Members ÷ total members × 100. | Preferred label over "Participation Rate". |
+| **Active Member Rate** | Active Members ÷ window roster × 100. | Preferred label over "Participation Rate". The denominator is everyone on the server at any point in the selected period, not the end-of-period total: a member who was active in the window and then left could still participate, so dividing by the end-of-period roster overstates the rate and can exceed 100% at 90 days. |
 | **New Member Activation** | Eligible new members who performed at least one qualifying activity within 7 days of joining ÷ eligible new members × 100. | Eligible members have had the full 7-day activation window. |
 | **30-day Retention** | Members active in the previous 30-day period who are active again in the current 30-day period ÷ members active in the previous 30-day period × 100. | Canonical retention metric; not a new-member metric. |
 
@@ -87,6 +89,28 @@ Members are assigned one canonical activity tier using a trailing 28-day window.
 | **Regular** | Remaining active members who demonstrate recurring participation. | Meaningfully recurring activity below Contributor. |
 | **Lurker** | Members with detectable participation but insufficient activity to qualify as Regular. | Evidence of presence, but very low activity. |
 | **Inactive** | Members with no qualifying activity during the 28-day window. | No message, reaction, or voice participation. |
+
+**The tier distribution does not respond to the date range.** It is the one
+Engagement card that is deliberately period-independent: the tier engine is
+anchored to the window end and always measures the trailing 28 days, so
+selecting 7/14/30/90 days (or a custom range) leaves this card unchanged. This
+is required, not a bug — the tier is the *shared canonical member attribute*
+rendered on Engagement, People, member profiles, the member popup, saved
+segments, and as the Influence Score window on Relationships. Making this card
+respond to the picker would let the same member show two different tiers
+depending on which page they are viewed from.
+
+To keep the behaviour legible, the card title carries a **Trailing 28 days**
+caption stating the window in use. Period-based metrics elsewhere on the page
+(Active Members, Messages, rates, charts, channels, discussions) all follow the
+date range as normal.
+
+> **Implementation:** `dashboardWindow` counts tiers via `activityTiers(end)`,
+> which hardcodes `cutoff = end - 28d`. The chosen range never reaches the tier
+> engine. Note that because Superuser and Contributor are cut as percentiles of
+> *active* members, their shares are stable even if the window were re-scoped;
+> only Regular/Lurker/Inactive absorb the change, and a 7-day re-scope would
+> leave the card ~85% Inactive.
 
 ## 10. Activity Score
 

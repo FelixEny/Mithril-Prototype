@@ -71,10 +71,9 @@ Page documentation contains the metrics, calculations, data requirements, intera
 
 Examples:
 
-- `docs/pages/overview.md`
 - `docs/pages/engagement.md`
 - `docs/pages/members.md`
-- `docs/pages/network.md`
+- `docs/pages/relationship.md`
 
 Do not invent product logic or metric definitions when they are specified in the relevant page documentation.
 
@@ -111,14 +110,16 @@ Figma remains the visual source of truth.
 The list standard for dropdown/menu content. Use the `Menu`/`MenuGroup`/`MenuItem` components unless there is a reason not to.
 
 - Item text: 14px, weight 400, `--content-primary`.
-- Item padding: `6px` vertical (`--space-6px`) and `8px` horizontal (`--space-sm`); item radius 4px.
+- Item padding: `6px` vertical (`--space-6px`) and `8px` horizontal (`--space-sm`); item radius 6px.
 - Items may have a leading icon (`.menu-icon`, before the label) and/or a trailing icon (`.menu-trailing`, after the label). Icons may be visible or hidden depending on the use case.
 - Item hover: background `--surface-secondary`.
 - Selected/active item: background `--surface-brand-light`, plus a check-circle icon (`.menu-check`, `--content-brand`) on the right. The check is always in the DOM and toggled `visibility` by `.selected` so item labels stay aligned.
-- Container (`.menu` frame): radius `--radius-md` (8px), 1px outside stroke `--border-modal`, shadow `--shadow-md`, padding 4px (`--space-xs`).
+- Container (`.menu` frame): radius 8px, 1px outside stroke `--border-modal`, shadow `--shadow-md`, padding 4px (`--space-xs`).
 - Optional group title (`.menu-group-title`): 12px, `--content-secondary`, same 6/8 padding — only for special cases via `MenuGroup`.
 - Positioning of a floating menu is per use case (e.g. `.graph-select .menu` sets `position:absolute; top:calc(100% + 6px); left:0`); the frame skin lives in the un-scoped `.menu*` rules in `styles.css`.
 - Note: the date range picker renders its preset list as borderless `.menu-item` rows (no `.menu` frame) inside the popover shell — the `Menu` frame is skipped when the popup container already provides the border.
+- Multi-select options (e.g. the People page filter submenus) use `MenuCheckItem`: a checkbox (`.menu-checkbox`, always in the DOM, `.on` fills it brand) before the label, selected state styled like `MenuItem.selected`. Same item padding/radius as `MenuItem`.
+- Nested submenus open beside their parent row (`menu-sub-row` + caret) as `.menu-sub` in a positioned container (`.people-filter-menu .menu-sub`, `.graph-filter-menu .menu-sub`); the parent triggers on hover, and the submenu keeps the `.menu` frame skin.
 
 ### Design Tokens
 

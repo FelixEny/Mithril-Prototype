@@ -70,7 +70,6 @@ export function DateRangePicker({ range, custom, endDate, onSelectPreset, onSele
                 onMouseLeave={clearHover}
               />
             ))}
-            <MenuItem label="Custom" selected={!!custom} onSelect={() => {}} onMouseEnter={clearHover} onMouseLeave={clearHover} />
           </div>
           <div className="dc-calendar">
             <DayPicker

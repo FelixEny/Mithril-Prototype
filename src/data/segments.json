@@ -1,0 +1,127 @@
+[
+  {
+    "id": "seg_contributors",
+    "name": "Contributors",
+    "kind": "dynamic",
+    "builtIn": true,
+    "description": "Contributor or Superuser activity in the last 28 days.",
+    "criteria": {
+      "activityTier": [
+        "Contributor",
+        "Superuser"
+      ]
+    }
+  },
+  {
+    "id": "seg_new_this_month",
+    "name": "New this month",
+    "kind": "dynamic",
+    "builtIn": true,
+    "description": "Members who joined within the last 28 days.",
+    "criteria": {
+      "joinedWithinDays": 28
+    }
+  },
+  {
+    "id": "seg_at_risk",
+    "name": "At risk",
+    "kind": "dynamic",
+    "builtIn": true,
+    "description": "Joined over 60 days ago with no activity in the last 28 days.",
+    "criteria": {
+      "joinedBeforeDays": 60,
+      "activityTier": [
+        "Inactive"
+      ]
+    }
+  },
+  {
+    "id": "seg_onboarded_7d",
+    "name": "Onboarded last 7 days",
+    "kind": "dynamic",
+    "builtIn": true,
+    "description": "Members who joined within the last 7 days.",
+    "criteria": {
+      "joinedWithinDays": 7
+    }
+  },
+  {
+    "id": "seg_alpha_builders",
+    "name": "Alpha builders",
+    "kind": "static",
+    "builtIn": true,
+    "description": "The most active contributor roster.",
+    "memberIds": [
+      "m_0144",
+      "m_0218",
+      "m_0226",
+      "m_0245",
+      "m_0246",
+      "m_0335",
+      "m_0347",
+      "m_0356",
+      "m_0437",
+      "m_0440",
+      "m_0441",
+      "m_0450",
+      "m_0490",
+      "m_0513",
+      "m_0516",
+      "m_0580",
+      "m_0682",
+      "m_0691",
+      "m_0703",
+      "m_0731",
+      "m_0746",
+      "m_0805",
+      "m_0817",
+      "m_0826",
+      "m_0833",
+      "m_0856",
+      "m_0885",
+      "m_0930",
+      "m_0980",
+      "m_0998",
+      "m_1035",
+      "m_1195",
+      "m_1227",
+      "m_1303",
+      "m_1357",
+      "m_1368",
+      "m_1371",
+      "m_1374",
+      "m_1435",
+      "m_1455",
+      "m_1477",
+      "m_1561",
+      "m_1586",
+      "m_1599",
+      "m_1676",
+      "m_1679",
+      "m_1682",
+      "m_1691",
+      "m_1725",
+      "m_1813",
+      "m_1851",
+      "m_1852",
+      "m_1856",
+      "m_1909",
+      "m_1936",
+      "m_1944",
+      "m_2048",
+      "m_2065",
+      "m_2074",
+      "m_2157",
+      "m_2170",
+      "m_2227",
+      "m_2230",
+      "m_2268",
+      "m_2284",
+      "m_2286",
+      "m_2302",
+      "m_2355",
+      "m_2375",
+      "m_2382"
+    ]
+  }
+]

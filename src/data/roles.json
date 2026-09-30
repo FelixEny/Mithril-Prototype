@@ -1,7 +1,7 @@
 [
   {
     "id": "role_001",
-    "name": "Admin",
+    "name": "Core-Team",
     "color": "#5865F2"
   },
   {
@@ -11,27 +11,42 @@
   },
   {
     "id": "role_003",
-    "name": "Core Member",
-    "color": "#FEE75C"
+    "name": "Admin",
+    "color": "#ED4245"
   },
   {
     "id": "role_004",
-    "name": "Builder",
-    "color": "#EB459E"
+    "name": "Cohort-Mentor",
+    "color": "#FEE75C"
   },
   {
     "id": "role_005",
-    "name": "Designer",
-    "color": "#9B59B6"
+    "name": "Bounty-Hunter",
+    "color": "#F47B20"
   },
   {
     "id": "role_006",
-    "name": "Community",
+    "name": "Contributor",
     "color": "#3498DB"
   },
   {
     "id": "role_007",
-    "name": "New Member",
+    "name": "Ambassador",
+    "color": "#9B59B6"
+  },
+  {
+    "id": "role_008",
+    "name": "Degen",
+    "color": "#1ABC9C"
+  },
+  {
+    "id": "role_009",
+    "name": "Member",
     "color": "#95A5A6"
+  },
+  {
+    "id": "role_010",
+    "name": "Design",
+    "color": "#EC7AB8"
   }
 ]
