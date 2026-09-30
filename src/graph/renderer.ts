@@ -42,6 +42,14 @@ const EDGE_BUDGET_FIT = 2500
 const EDGE_BUDGET_MID_CAP = 6000
 const EDGE_BUDGET_DEEP_CAP = 12000
 
+// Level-of-detail tiers reuse the same k = 1/ratio boundaries as the edge
+// reveal above, so node detail and relationship detail flip together. LOD only
+// changes node representation: the member population is never filtered.
+// Overview collapses every member to a constant-screen-size cluster dot; Mid
+// caps avatars below the Detail ceiling.
+const LOD_DOT_R_PX = 2.5
+const AVATAR_MID_R_PX = 16
+
 // Constant screen widths (css px) — the edge reducer converts these to world
 // sizes every refresh, cancelling sigma's zoom growth exactly.
 const EDGE_W: Record<'default' | StrengthLabel, number> = { default: 1.1, strong: 2.2, mid: 1.5, weak: 1.0 }
@@ -95,6 +103,24 @@ export const hexMix = (a: string, b: string, t: number): string => {
   const g = Math.round(ga + (gb - ga) * t)
   const bl = Math.round(ba + (bb - ba) * t)
   return `#${((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0')}`
+}
+
+// Sigma's built-in disc label anchors names to the RIGHT of the node
+// (`x + size + 3`). Mithril wants names centred BELOW the avatar, so we supply
+// our own renderer using the same font/colour tokens. Coordinates are viewport
+// px and `data.size` is the on-screen disc radius, matching sigma's default.
+function drawLabelBelow(context: CanvasRenderingContext2D, data: DisplayNode, settings: DisplayNode): void {
+  if (!data.label) return
+  const color = settings.labelColor?.attribute
+    ? data[settings.labelColor.attribute] || settings.labelColor.color || '#6B7280'
+    : settings.labelColor?.color || '#6B7280'
+  context.save()
+  context.fillStyle = color
+  context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`
+  context.textAlign = 'center'
+  context.textBaseline = 'top'
+  context.fillText(data.label, data.x, data.y + data.size + 4)
+  context.restore()
 }
 
 export interface GraphEngineHandlers {
@@ -151,6 +177,8 @@ export class GraphEngine {
   private selectedId: string | null = null
   private searchQuery = ''
   private importantIds = new Set<string>()
+  // Mid-tier label set: bridges, top-30 influencers and most-connected members.
+  private labelIds = new Set<string>()
   private popIds: string[] = []
 
   private nbsCache = new Map<string, Set<string>>()
@@ -223,6 +251,9 @@ export class GraphEngine {
       hideLabelsOnMove: true,
       hideEdgesOnMove: true,
       labelColor: { color: '#6B7280' },
+      // Names sit centred below the avatar rather than sigma's default
+      // right-of-node placement.
+      defaultDrawNodeLabel: drawLabelBelow,
       labelFont: '"Inter", "Geist", system-ui, -apple-system, sans-serif',
       labelWeight: '400',
       labelSize: 12,
@@ -281,6 +312,12 @@ export class GraphEngine {
     this.importantIds = new Set(pop.members.slice(0, 30).map((m) => m.id))
     for (const m of pop.members) {
       if (m.bridge || m.mostConnected || m.degree >= 40) this.importantIds.add(m.id)
+    }
+    // Mid LOD labels only bridges, the top-30 by influence and most-connected
+    // members — narrower than the degree>=40 set used at Detail.
+    this.labelIds = new Set(pop.members.slice(0, 30).map((m) => m.id))
+    for (const m of pop.members) {
+      if (m.bridge || m.mostConnected) this.labelIds.add(m.id)
     }
 
     // Atlas: claim + bake initials synchronously; photos decode async.
@@ -600,6 +637,12 @@ export class GraphEngine {
       return true
     })()
 
+    // Focus (hover/selection) or an active search turns LOD off: the ego view
+    // and search results keep full avatars and names at every zoom, so the
+    // focused/searched member stays identifiable. LOD only shapes the resting,
+    // unfiltered view.
+    const lodTier = focusId !== null || q !== '' ? 2 : this.revealTier
+
     const dim = !m
     const base = sizeForDegree(attrs.degree)
     const cap = this.nodeWorldForRadius(AVATAR_MAX_R_PX)
@@ -607,6 +650,7 @@ export class GraphEngine {
     const selected = node === this.selectedId
     const hovered = node === this.hoveredId
     const important = this.importantIds.has(node)
+    const labelable = this.labelIds.has(node)
     const isFocus = focusId !== null && node === focusId
     const nbs = focusId !== null && !isFocus ? this.neighborsOf(focusId) : null
     const isNeighbor = nbs !== null && nbs.has(node)
@@ -623,10 +667,12 @@ export class GraphEngine {
       ringWidth = RING_W * this.devicePx()
     }
 
-    // Size + halo follow Marvel's focus model: rest members carry a soft
-    // 5x cluster wash; the focused member grows (under the ceiling) with a
-    // strong halo; neighbors keep a medium wash; everyone else collapses to
-    // a faint dot with no halo.
+    // Size + halo follow Marvel's focus model: rest members carry a soft 5x
+    // cluster wash; the focused member grows (under the ceiling) with a strong
+    // halo; neighbors keep a medium wash; everyone else collapses to a faint
+    // dot with no halo. Halo sizes derive from the tier-independent avatar size
+    // so the cluster wash survives the Overview collapse to dots.
+    const avatarSize = Math.min(base, cap)
     let size: number
     let haloSize = 0
     let haloAlpha = 0
@@ -640,31 +686,51 @@ export class GraphEngine {
       size = Math.min(base, cap)
       haloSize = base * HALO_NB_SCALE
       haloAlpha = HALO_ALPHA_NB
+    } else if (lodTier === 0) {
+      // Overview: a constant-screen-size dot drawn from the flat cluster color
+      // (no atlas texture). The wash is kept so community structure reads.
+      size = this.nodeWorldForRadius(LOD_DOT_R_PX)
+      haloSize = avatarSize * HALO_SCALE
+      haloAlpha = HALO_ALPHA
+    } else if (lodTier === 1) {
+      // Mid: small avatars, capped below the Detail ceiling.
+      size = Math.min(base, this.nodeWorldForRadius(AVATAR_MID_R_PX))
+      haloSize = size * HALO_SCALE
+      haloAlpha = HALO_ALPHA
     } else {
-      size = Math.min(base, cap)
+      size = avatarSize
       haloSize = size * HALO_SCALE
       haloAlpha = HALO_ALPHA
     }
 
+    // Overview replaces avatars with cluster-colored dots. Focus/selection/
+    // search force lodTier 2 above, so those nodes never become dots here.
+    const isDot = lodTier === 0 && !dim
     const opaqueColor = dim
       ? COLORS.dim
-      : attrs.avatarKind === 'none'
-        ? attrs.avatarColor ?? '#693CF3'
-        : COLORS.surface
+      : isDot
+        ? attrs.clusterColor ?? '#693CF3'
+        : attrs.avatarKind === 'none'
+          ? attrs.avatarColor ?? '#693CF3'
+          : COLORS.surface
 
-    // Labels: every visible member is named (the grid prunes collisions);
-    // focused/important members force theirs. Size stays 12px at any zoom.
-    const hot = selected || hovered || (q && hit) || important
-    const forceLabel = hot
+    // Labels: Overview names nothing, Mid names only bridges / top-30 /
+    // most-connected members, Detail names every visible member. Focused,
+    // hovered and search-hit members are always labelled. The grid prunes
+    // collisions as before. Size stays 12px at any zoom.
+    const hot = selected || hovered || (q && hit)
+    const importantLabel = lodTier === 1 && labelable
+    const showLabel = !dim && (lodTier >= 2 || importantLabel)
+    const forceLabel = hot || importantLabel || (lodTier >= 2 && important)
 
     return {
       x: attrs.x,
       y: attrs.y,
       size,
       color: opaqueColor,
-      label: dim ? '' : attrs.name,
+      label: showLabel ? attrs.name : '',
 
-      avatarKey: dim ? '' : (attrs.avatarKey ?? ''),
+      avatarKey: dim || isDot ? '' : (attrs.avatarKey ?? ''),
       haloColor: attrs.haloColor ?? attrs.clusterColor ?? '#693CF3',
       haloSize,
       haloAlpha,
@@ -726,6 +792,12 @@ export class GraphEngine {
       return { hidden: true, size: 0 }
     }
     if (q && !(sourceHit || targetHit)) {
+      return { hidden: false, color: COLORS.faint, size: this.edgeWorldFor(1.0), label: '' }
+    }
+    // Overview keeps the relationship web but pushes it further into the
+    // background so the cluster dots stay legible; Mid/Detail use the default
+    // web. Only colour/width change — every edge still obeys the same budget.
+    if (k < REVEAL_K1) {
       return { hidden: false, color: COLORS.faint, size: this.edgeWorldFor(1.0), label: '' }
     }
     return { hidden: false, color: COLORS.edgeDefault, size: this.edgeWorldFor(EDGE_W.default), label: '' }

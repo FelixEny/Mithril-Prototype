@@ -472,3 +472,30 @@ The definitions and weighting in this document are product-level decisions.
 Exact normalization curves for Frequency, Recency, Consistency, Reach, Activity, and the Distribution component should be calibrated against representative Discord data before production release.
 
 Calibration should change how raw values are scaled, not what the metrics mean.
+
+---
+
+# 15. Graph Level of Detail (LOD)
+
+The graph keeps the **entire filtered member population rendered at every zoom
+level**. Zoom changes only how much visual detail each member shows; it never
+changes which members are present.
+
+Level of detail is driven by the sigma camera ratio via `k = 1 / camera.ratio`.
+Camera ratio `1` is fit; zooming in decreases the ratio and increases `k`. The
+boundaries are the same ones the relationship reveal already uses, so node
+detail and relationship detail change together:
+
+| Level | Condition | Members shown as | Labels | Relationships |
+|---|---|---|---|---|
+| Overview | `k < 2.1` | Small cluster-colored dots | None | Subtle |
+| Mid | `2.1 ≤ k < 3.5` | Small avatars (capped around 16px radius) | Bridges, top-30 by influence, and most-connected members | More edges revealed |
+| Detail | `k ≥ 3.5` | Full avatar sizing | Every visible member | Full detail |
+
+At Overview each member is a dot tinted with its cluster color, so community
+structure still reads through the clusters and the cluster halo wash. Bridge
+rings remain visible at every level.
+
+Focusing, selecting, or searching a member overrides LOD: that member — and its
+ego view or search results — always renders at full avatar detail with a label,
+so it remains identifiable at any zoom.
