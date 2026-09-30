@@ -57,7 +57,20 @@ export default function App() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
-  useEffect(() => { loadData().then(() => setReady(true)) }, [])
+  // Initials bake into the graph avatar atlas synchronously, and the DOM
+  // Avatar centres its glyph from font metrics — both need the real Geist
+  // outlines, not a fallback. Since every render is gated on `ready` anyway,
+  // waiting here costs nothing visible and beats baking Arial and popping.
+  useEffect(() => {
+    let cancelled = false
+    loadData()
+      .then(() => document.fonts.load('600 40px Geist'))
+      .catch(() => {})
+      .then(() => document.fonts.ready)
+      .catch(() => {})
+      .then(() => { if (!cancelled) setReady(true) })
+    return () => { cancelled = true }
+  }, [])
   // Deferred warm: after the skeleton clears, mount the inactive pages hidden so
   // their analytics engines (relationships, influence, people rows) are computed
   // and their DOM is ready before the user navigates. Yields past first paint.

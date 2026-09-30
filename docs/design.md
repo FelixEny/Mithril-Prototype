@@ -233,7 +233,16 @@ Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS 
 - Weight: Regular
 - Size: 10px
 - Letter spacing: -1%
-- Note: micro labels only (chart hour labels, avatar initials). Line height inherits from context.
+- Note: micro labels only (chart hour labels). Line height inherits from context. Avatar initials do **not** use `xs-micro` — see Avatar Initials below.
+
+# Avatar Initials
+
+Avatar initials are a single uppercase character on a tinted disc, drawn in `--font-family` at `--font-weight-semibold` in `--surface-primary`. They are **not** a step of the type scale: the glyph is sized from the disc it sits in, so it reads identically at 8px and at 88px.
+
+- **Scale**: `avatarInitialSize(discDiameterPx)` in `src/avatars.ts` is the single source of truth, consumed by both the DOM `Avatar` component and the graph's baked avatar atlas. Its anchors are (disc, glyph) pairs — 8/4, 20/9, 32/13, 52/20, 88/34 — interpolated in between. The glyph/disc ratio eases from ~0.50 at 8px to ~0.39 at 88px, because a tiny disc needs a relatively larger glyph to stay legible while a large one needs a relatively smaller glyph to stay balanced. Do not reintroduce a fixed percentage of the disc.
+- **Optics**: the glyph is centred on its **measured ink box**, not its em box — a single character's ink is narrower and taller than its em box, so `text-align`/`vertical-align` centering leaves it visibly off-centre. Plain capitals measure 17px of cap in the graph's 62px sampled disc (27%); descender glyphs such as `Q` reach ~35%. A further lift of `--avatar-initial-optical-lift` (0.0146em) compensates for a glyph reading slightly low in a circle; the token is em-relative so the DOM and the canvas bake convert it identically.
+- **Graph**: the atlas holds one cell per avatar key, so one baked glyph serves every node size and the proportion is constant across the graph's 8–52px range by design — including dimmed nodes, whose initials were previously large enough to fill the disc and read as a white blob. Per-size cells would need size-bucketed keys and are capped at three buckets by the atlas page budget. The bake must be given the cell's **sampled** diameter (`CONTENT / 2`), not the full cell: the node shader's UV ray is twice the disc radius, so only the cell's central half is visible on screen. Feeding the full cell width renders every initial at roughly twice its intended size.
+- **Font readiness**: initials are centred from font metrics, so they bake and measure against real `Geist` outlines. `App` awaits `document.fonts.load('600 40px Geist')` before any screen renders.
 
 # Shadows
 

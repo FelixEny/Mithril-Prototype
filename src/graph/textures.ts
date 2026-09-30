@@ -1,4 +1,4 @@
-import { getMemberAvatar, type AvatarKind } from '../avatars'
+import { avatarInitialSize, getMemberAvatar, type AvatarKind } from '../avatars'
 
 // Baked texture atlas for member avatars.
 //
@@ -17,19 +17,47 @@ export const CELLS_PER_SIDE = Math.floor(PAGE / CELL)
 export const CELLS_PER_PAGE = CELLS_PER_SIDE * CELLS_PER_SIDE
 
 // Initials typography is token-driven: family/weight come from the design
-// system vars set on :root, letter size follows the avatar-glyph ratio used by
-// the UI avatar component (~44% of the disc). Resolved lazily so module
+// system vars set on :root, glyph size comes from the shared avatarInitialSize()
+// scale (also used by the DOM Avatar component), and the initial is centred on
+// its measured ink box rather than its em box. Resolved lazily so module
 // imports (e.g. SSR probes) never touch the DOM.
-let cssTokens: { family: string; weight: string; surface: string } | null = null
-function readCssTokens(): { family: string; weight: string; surface: string } {
+let cssTokens: {
+  family: string
+  weight: string
+  surface: string
+  opticalLift: number
+} | null = null
+function readCssTokens(): { family: string; weight: string; surface: string; opticalLift: number } {
   if (cssTokens) return cssTokens
   const root = getComputedStyle(document.documentElement)
   cssTokens = {
     family: root.getPropertyValue('--font-family').trim() || 'Geist, sans-serif',
     weight: root.getPropertyValue('--font-weight-semibold').trim() || '600',
     surface: root.getPropertyValue('--surface-primary').trim() || '#FFFFFF',
+    // Declared in em (--avatar-initial-optical-lift); 1em is the glyph size
+    // here, so the numeric part converts straight to px by scaling the glyph.
+    opticalLift: parseFloat(root.getPropertyValue('--avatar-initial-optical-lift')) || 0,
   }
   return cssTokens
+}
+
+// Ink metrics per (glyph size, character). The atlas bakes ~140 distinct
+// initials synchronously, and each character at the single baked size only ever
+// needs measuring once.
+const inkMetricCache = new Map<string, { ascent: number; descent: number; left: number; right: number }>()
+function inkMetricsOf(ctx: CanvasRenderingContext2D, text: string, glyph: number) {
+  const key = `${glyph}|${text}`
+  const cached = inkMetricCache.get(key)
+  if (cached) return cached
+  const m = ctx.measureText(text)
+  const metrics = {
+    ascent: m.actualBoundingBoxAscent,
+    descent: m.actualBoundingBoxDescent,
+    left: m.actualBoundingBoxLeft,
+    right: m.actualBoundingBoxRight,
+  }
+  inkMetricCache.set(key, metrics)
+  return metrics
 }
 
 export interface AtlasRegion {
@@ -158,18 +186,28 @@ export class MemberAtlas {
     ctx.stroke()
     // Content is mirrored on the Y axis: the node shader maps the disc's
     // screen-top edge to the cell's bottom row (sigma's camera never flips Y),
-    // so without the mirror every avatar would bake upside down. The initial
-    // is centered mathematically — textAlign/textBaseline do the centering,
-    // no manual offsets.
+    // so without the mirror every avatar would bake upside down.
     ctx.save()
     ctx.translate(cx, cy)
     ctx.scale(1, -1)
     const t = readCssTokens()
+    // The shader's UV ray is twice the disc radius, so it samples only the
+    // central CONTENT / 2 of this cell: 62px of visible disc, not 124. The
+    // scale must be applied to that sampled diameter or every initial renders
+    // at roughly twice its intended size.
+    const glyph = avatarInitialSize(CONTENT / 2)
     ctx.fillStyle = t.surface
-    ctx.font = `${t.weight} ${Math.round(CONTENT * 0.44)}px ${t.family}`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(spec.initial, 0, 0)
+    ctx.font = `${t.weight} ${glyph.toFixed(2)}px ${t.family}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    const ink = inkMetricsOf(ctx, spec.initial, glyph)
+    // Centre the ink box (a single glyph's ink is narrower and taller than its
+    // em box, so textAlign/textBaseline leave it visibly off-centre), then
+    // lift by a fraction of the cap height for optical centering. Local +Y is
+    // canvas-up, which the shader then flips, so screen-up is negative local Y.
+    const dx = (ink.left - ink.right) / 2
+    const dy = (ink.ascent - ink.descent) / 2 - glyph * t.opticalLift
+    ctx.fillText(spec.initial, dx, dy)
     ctx.restore()
     ctx.restore()
   }

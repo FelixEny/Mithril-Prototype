@@ -6,6 +6,52 @@ import { members } from './data'
 // with the design-system avatar palette.
 export type AvatarKind = 'photo' | 'dicebear' | 'pravatar' | 'none'
 
+// --- Initials typography ----------------------------------------------------
+// Single source of truth for the size of an avatar's initial. Both the DOM
+// Avatar component and the graph's baked atlas read this, so an initials disc
+// reads the same everywhere.
+//
+// Anchors are (disc diameter px, glyph size px) pairs spanning every avatar
+// size the UI uses. The glyph/disc ratio eases from ~0.50 at 8px down to ~0.39
+// at 88px: a tiny disc needs a relatively larger glyph to stay legible, while a
+// large disc needs a relatively smaller one to stay balanced. Interpolated
+// between anchors, so in-between sizes (and the atlas cell) get a sensible
+// value instead of snapping. With Geist's ~0.73em cap this puts cap height at
+// roughly 37% of the disc at 8px easing down to ~28% at 52px and above.
+const AVATAR_INITIAL_ANCHORS: readonly (readonly [number, number])[] = [
+  [8, 4],
+  [20, 9],
+  [32, 13],
+  [52, 20],
+  [88, 34],
+]
+
+/**
+ * Glyph size in px for a single uppercase initial inside a circular avatar
+ * `size` px in diameter.
+ */
+export const avatarInitialSize = (size: number): number => {
+  const anchors = AVATAR_INITIAL_ANCHORS
+  if (size <= anchors[0][0]) return anchors[0][1]
+  const last = anchors[anchors.length - 1]
+  if (size >= last[0]) return last[1]
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [fromD, fromG] = anchors[i]
+    const [toD, toG] = anchors[i + 1]
+    if (size >= fromD && size <= toD) {
+      const t = (size - fromD) / (toD - fromD)
+      return fromG + t * (toG - fromG)
+    }
+  }
+  return last[1]
+}
+
+// A single glyph centred on its ink box still reads a touch low inside a
+// circle, because the eye reads the circle's centre as slightly above the
+// geometric midpoint. The lift itself lives in tokens.css as
+// --avatar-initial-optical-lift (em-relative, so the canvas bake and the DOM
+// Avatar can both consume the same single definition).
+
 const hashId = (id: string) => {
   let h = 2166136261
   for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0 }
