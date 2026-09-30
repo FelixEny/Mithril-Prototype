@@ -44,7 +44,7 @@ varying vec2 v_uv;
 varying float v_radius;
 varying float v_textureIndex;
 varying vec4 v_ring;
-varying float v_ringWidthPx;
+varying float v_ringWidth;
 
 const float bias = 255.0 / 254.0;
 
@@ -53,7 +53,11 @@ void main() {
   v_radius = size / 2.0;
   v_textureIndex = a_textureIndex;
   v_ring = a_ring;
-  v_ringWidthPx = a_ringWidth * u_correctionRatio / u_sizeRatio * 4.0;
+  // Ring thickness expressed in world units: one world unit covers 2 *
+  // u_correctionRatio screen pixels, so a_ringWidth (device px) renders at
+  // exactly a_ringWidth px at any zoom, while v_ringWidth stays in v_radius's
+  // own coordinate space.
+  v_ringWidth = a_ringWidth * u_correctionRatio * 2.0;
 
   vec2 unitDir = vec2(cos(a_angle), sin(a_angle));
   vec2 discOffset = size * unitDir;
@@ -63,7 +67,7 @@ void main() {
   // vertex offset. Size it so the triangle fully contains the avatar disc AND
   // the outer ring (plus its AA border), keeping the avatar radius unchanged.
   float ringBorder = u_correctionRatio * 2.0;
-  float extra = v_ringWidthPx + ringBorder;
+  float extra = v_ringWidth + ringBorder;
   float geomSize = 2.0 * (v_radius + extra);
   vec2 diffVector = geomSize * unitDir;
   vec2 position = a_position + diffVector;
@@ -89,7 +93,7 @@ varying vec2 v_uv;
 varying float v_radius;
 varying float v_textureIndex;
 varying vec4 v_ring;
-varying float v_ringWidthPx;
+varying float v_ringWidth;
 
 uniform float u_correctionRatio;
 uniform sampler2D u_atlas_0;
@@ -139,12 +143,13 @@ void main(void) {
 
   vec4 frag = mix(disc, transparent, t);
 
-  // Selection / search / bridge ring drawn strictly outside the disc. Keep
-  // both antialiasing feathers inside the ring's own width so no ring alpha
-  // leaks into the avatar or the underlying triangle corners.
-  if (v_ring.a > 0.001 && v_ringWidthPx > 0.0) {
+  // Selection / search / bridge ring is a true annulus OUTSIDE the avatar:
+  // inner edge at the exact avatar radius, outer edge one ring thickness
+  // (constant screen px) further out. Both antialiasing feathers stay inside
+  // the ring's own width, so no ring alpha ever lands on the avatar.
+  if (v_ring.a > 0.001 && v_ringWidth > 0.0) {
     float ringInner = v_radius;
-    float ringOuter = v_radius + v_ringWidthPx;
+    float ringOuter = v_radius + v_ringWidth;
     float ringBorder = min(border, (ringOuter - ringInner) * 0.25);
     float inA = smoothstep(ringInner, ringInner + ringBorder, dist);
     float outA = 1.0 - smoothstep(ringOuter - ringBorder, ringOuter, dist);

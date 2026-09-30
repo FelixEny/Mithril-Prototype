@@ -46,6 +46,11 @@ const EDGE_BUDGET_DEEP_CAP = 12000
 // sizes every refresh, cancelling sigma's zoom growth exactly.
 const EDGE_W: Record<'default' | StrengthLabel, number> = { default: 1.1, strong: 2.2, mid: 1.5, weak: 1.0 }
 
+// Ring thickness (css px), painted OUTSIDE the avatar edge. The node shader
+// converts it to world units per frame, so it holds this thickness at any
+// zoom and for any avatar size.
+const RING_W = 2
+
 // Per-node halo tuning (Marvel: size 5x, intensity ~0.05*log at rest,
 // 0.65-0.75 on focus). Ours reads slightly stronger so the cluster wash is
 // visible over the dotted background at overview.
@@ -606,15 +611,16 @@ export class GraphEngine {
     const nbs = focusId !== null && !isFocus ? this.neighborsOf(focusId) : null
     const isNeighbor = nbs !== null && nbs.has(node)
 
-    // Ring: selected > hovered > search hit > bridge.
+    // Ring: selected > hovered > search hit > bridge. Widths are css px,
+    // converted to device px here and kept constant on screen by the shader.
     let ring: [number, number, number, number] | null = null
     let ringWidth = 0
     if (selected || hovered || (q && hit)) {
       ring = [0x69 / 255, 0x3c / 255, 0xf3 / 255, 1]
-      ringWidth = 2.5
+      ringWidth = RING_W * this.devicePx()
     } else if (attrs.bridge) {
       ring = [0x00 / 255, 0x9a / 255, 0x47 / 255, 1]
-      ringWidth = 1.8
+      ringWidth = RING_W * this.devicePx()
     }
 
     // Size + halo follow Marvel's focus model: rest members carry a soft
