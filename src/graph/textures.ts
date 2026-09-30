@@ -13,7 +13,8 @@ export const PAD = 2
 export const CONTENT = CELL - PAD * 2
 export const PAGE = 2048
 export const MAX_PAGES = 4
-export const CELLS_PER_PAGE = Math.floor(PAGE / CELL)
+export const CELLS_PER_SIDE = Math.floor(PAGE / CELL)
+export const CELLS_PER_PAGE = CELLS_PER_SIDE * CELLS_PER_SIDE
 
 // Initials typography is token-driven: family/weight come from the design
 // system vars set on :root, letter size follows the avatar-glyph ratio used by
@@ -105,7 +106,10 @@ export class MemberAtlas {
     // tail of the list onto the last page, colliding distinct keys
     // last-write-wins onto the same cell (wrong avatars).
     const sorted = [...new Set(keys)].sort()
-    const pagesNeeded = Math.max(1, Math.ceil(sorted.length / CELLS_PER_PAGE / CELLS_PER_PAGE))
+    const pagesNeeded = Math.max(1, Math.ceil(sorted.length / CELLS_PER_PAGE))
+    if (pagesNeeded > MAX_PAGES) {
+      throw new Error(`MemberAtlas: ${sorted.length} distinct avatars need ${pagesNeeded} pages (max ${MAX_PAGES})`)
+    }
     const pagesToCreate = Math.min(MAX_PAGES, pagesNeeded)
     for (let p = 0; p < pagesToCreate; p++) {
       const canvas = document.createElement('canvas')
@@ -117,14 +121,12 @@ export class MemberAtlas {
     }
     for (let i = 0; i < sorted.length; i++) {
       const key = sorted[i]
-      // Keys beyond the baked pages are folded onto the last page rather than
-      // overflowing into a page that was never allocated (safe degrade; key
-      // sets are bounded well under capacity by avatarKeyFor's palette/photo
-      // space, so in practice this never triggers).
-      const page = Math.min(Math.floor(i / (CELLS_PER_PAGE * CELLS_PER_PAGE)), pagesToCreate - 1)
-      const rest = i % (CELLS_PER_PAGE * CELLS_PER_PAGE)
-      const px = (rest % CELLS_PER_PAGE) * CELL
-      const py = Math.floor(rest / CELLS_PER_PAGE) * CELL
+      // Every claimed key gets its own cell (i < pagesNeeded * CELLS_PER_PAGE,
+      // so floor(i / CELLS_PER_PAGE) is always a real page — no folding).
+      const page = Math.floor(i / CELLS_PER_PAGE)
+      const rest = i % CELLS_PER_PAGE
+      const px = (rest % CELLS_PER_SIDE) * CELL
+      const py = Math.floor(rest / CELLS_PER_SIDE) * CELL
       this.cells.set(key, { page, px, py })
       this.map.set(key, {
         page,
