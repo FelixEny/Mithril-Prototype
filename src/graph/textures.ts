@@ -40,15 +40,16 @@ export const avatarKeyOf = (kind: AvatarSpec['kind'], color: string, initial: st
 
 export const avatarSpecFor = (memberId: string): AvatarSpec => {
   const spec = getMemberAvatar(memberId)
-  // Only local images are drawn into the atlas (remote URLs risk CORS taint on
-  // the page canvas that would break texImage2D). Everything else uses a
-  // deterministic initials disc carrying the avatar color.
-  const src = spec.src && !/^https?:/.test(spec.src) ? spec.src : undefined
+  // Remote image avatars (Pravatar, DiceBear) are drawn into the atlas like
+  // local faces; loadPhotos fetches them with crossOrigin='anonymous' (a
+  // CORS-blocked request fires onerror and keeps the initials fallback below).
+  // The initial comes from the member's display name, never the hashed avatar
+  // seed (which is numeric).
   return {
-    kind: spec.kind === 'photo' && src ? 'photo' : 'none',
+    kind: spec.src ? 'photo' : 'none',
     color: spec.color,
-    initial: (spec.seed ?? memberId).charAt(0).toUpperCase(),
-    src,
+    initial: (spec.name ?? '').trim().charAt(0).toUpperCase() || '?',
+    src: spec.src ?? undefined,
   }
 }
 
@@ -140,11 +141,18 @@ export class MemberAtlas {
     ctx.strokeStyle = 'rgba(13, 17, 33, 0.06)'
     ctx.lineWidth = 2
     ctx.stroke()
+    // Content is mirrored on the Y axis: the node shader maps the disc's
+    // screen-top edge to the cell's bottom row (sigma's camera never flips Y),
+    // so without the mirror every avatar would bake upside down.
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(1, -1)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
     ctx.font = FONT
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(spec.initial, cx, cy + 2)
+    ctx.fillText(spec.initial, 0, 2)
+    ctx.restore()
     ctx.restore()
   }
 
@@ -162,11 +170,15 @@ export class MemberAtlas {
     // Draw the image clipped to the disc. Preserve aspect by covering.
     ctx.save()
     ctx.clip()
+    // Same Y-mirror as bake(): the shader samples this cell's rows in reverse
+    // on screen, so the image is drawn flipped to come out upright.
+    ctx.translate(cx, cy)
+    ctx.scale(1, -1)
     const { width, height } = img
     const scale = Math.max(d / width, d / height)
     const iw = width * scale
     const ih = height * scale
-    ctx.drawImage(img, cx - iw / 2, cy - ih / 2, iw, ih)
+    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih)
     ctx.restore()
     ctx.strokeStyle = 'rgba(13, 17, 33, 0.08)'
     ctx.lineWidth = 2

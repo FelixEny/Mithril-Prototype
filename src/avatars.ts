@@ -34,22 +34,24 @@ export type AvatarSpec = {
   seed: string
   src: string | null
   color: string
+  name?: string
 }
 
 export const avatarFor = (id: string): AvatarSpec => {
   const seed = String(hashId(id) >>> 0)
   const k = kind(id)
+  const color = avatarPalette[hashId(id) % avatarPalette.length]
   const src = k === 'photo' ? facePool[hashId(id) % facePool.length]
-    : k === 'dicebear' ? `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}&backgroundType=gradientLinear,solid&backgroundColor=693CF3,009A47,008EFF,FDAB00,3CAA9F,E5484D&radius=50`
+    : k === 'dicebear' ? `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}&backgroundColor=${color.slice(1)}&radius=50`
     : k === 'pravatar' ? `https://i.pravatar.cc/128?img=${1 + (hashId(id) % 70)}`
     : null
-  return { kind: k, seed, src, color: avatarPalette[hashId(id) % avatarPalette.length] }
+  return { kind: k, seed, src, color }
 }
 
 // Built lazily from the live `members` binding once data is loaded (App awaits
 // loadData() first), so the map is never captured empty at import time.
 let avatarMap: Map<string, AvatarSpec> | null = null
 export const getMemberAvatar = (id: string): AvatarSpec => {
-  if (!avatarMap) avatarMap = new Map(members.map((m) => [m.id, avatarFor(m.id)]))
+  if (!avatarMap) avatarMap = new Map(members.map((m) => [m.id, { ...avatarFor(m.id), name: m.name }]))
   return avatarMap.get(id) ?? avatarFor(id)
 }
