@@ -1,4 +1,5 @@
 import { avatarSpecFor, avatarKeyFor, avatarKeyOf } from './textures'
+import type { AvatarKind } from '../avatars'
 import type { MemberRelInfo, RelationshipsData, StrengthLabel } from '../relationships'
 import { runLayout } from './layout'
 import type { MemberSpec, Population } from './types'
@@ -20,7 +21,7 @@ export interface PopulationNodeAttrs {
   bridge: boolean
   mostConnected: boolean
   avatarKey: string
-  avatarKind: 'none' | 'photo'
+  avatarKind: AvatarKind
   avatarColor: string
   clusterColor: string
 }
@@ -64,7 +65,7 @@ const MAX_CACHE = 24
 
 export const layoutKeyOf = (ids: string[]): string => ids.join('|')
 
-export const avatarAttrsOf = (id: string): { avatarKey: string; avatarKind: 'none' | 'photo'; avatarColor: string } => {
+export const avatarAttrsOf = (id: string): { avatarKey: string; avatarKind: AvatarKind; avatarColor: string } => {
   const spec = avatarSpecFor(id)
   return { avatarKey: avatarKeyOf(spec.kind, spec.color, spec.initial, spec.src), avatarKind: spec.kind, avatarColor: spec.color }
 }

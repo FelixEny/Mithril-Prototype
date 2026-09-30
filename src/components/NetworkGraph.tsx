@@ -1,10 +1,20 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { ArrowsOutSimple, Info, MagnifyingGlass, Minus, Plus } from '@phosphor-icons/react'
 import type { RelationshipsData } from '../relationships'
-import { GraphEngine, type GraphFilter } from '../graph/renderer'
+import { GraphEngine, type GraphFilter, type AvatarDiagnostics } from '../graph/renderer'
 import { Avatar } from './Avatar'
 import { getMemberAvatar } from '../avatars'
 import { MemberPopup } from './MemberPopup'
+
+// Dev-only: log avatar pipeline counts as they change (identical snapshots are
+// skipped so the bulk photo arrivals don't spam the console).
+let lastAvatarDiag = ''
+function logAvatarDiagnostics(d: AvatarDiagnostics): void {
+  const s = JSON.stringify(d)
+  if (s === lastAvatarDiag) return
+  lastAvatarDiag = s
+  console.log('[avatar-diag]', s)
+}
 
 export type { GraphFilter } from '../graph/renderer'
 export const FILTER_OPTIONS: { v: GraphFilter; label: string }[] = [
@@ -77,6 +87,7 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
         const info = instance.getGraph().getNodeAttributes(id)
         setHover({ id, name: info.name, username: info.username ?? null, x: pos.x, y: pos.y })
       },
+      onAvatarDiagnostics: import.meta.env.DEV ? logAvatarDiagnostics : undefined,
     })
     lastPop.current = { data, mf: { ...memberFilter } }
     setEngine(instance)

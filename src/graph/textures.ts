@@ -1,4 +1,4 @@
-import { getMemberAvatar } from '../avatars'
+import { getMemberAvatar, type AvatarKind } from '../avatars'
 
 // Baked texture atlas for member avatars.
 //
@@ -15,7 +15,21 @@ export const PAGE = 2048
 export const MAX_PAGES = 4
 export const CELLS_PER_PAGE = Math.floor(PAGE / CELL)
 
-const FONT = '600 56px "Inter", "Geist", system-ui, -apple-system, sans-serif'
+// Initials typography is token-driven: family/weight come from the design
+// system vars set on :root, letter size follows the avatar-glyph ratio used by
+// the UI avatar component (~44% of the disc). Resolved lazily so module
+// imports (e.g. SSR probes) never touch the DOM.
+let cssTokens: { family: string; weight: string; surface: string } | null = null
+function readCssTokens(): { family: string; weight: string; surface: string } {
+  if (cssTokens) return cssTokens
+  const root = getComputedStyle(document.documentElement)
+  cssTokens = {
+    family: root.getPropertyValue('--font-family').trim() || 'Geist, sans-serif',
+    weight: root.getPropertyValue('--font-weight-semibold').trim() || '600',
+    surface: root.getPropertyValue('--surface-primary').trim() || '#FFFFFF',
+  }
+  return cssTokens
+}
 
 export interface AtlasRegion {
   page: number
@@ -29,24 +43,22 @@ export interface AtlasRegion {
 }
 
 export interface AvatarSpec {
-  kind: 'none' | 'photo'
+  kind: AvatarKind
   color: string
   initial: string
   src?: string
 }
 
-export const avatarKeyOf = (kind: AvatarSpec['kind'], color: string, initial: string, src?: string): string =>
-  kind === 'photo' ? `s:${src ?? ''}` : `i:${color}:${initial}`
+export const avatarKeyOf = (kind: AvatarKind, color: string, initial: string, src?: string): string =>
+  kind === 'none' ? `i:${color}:${initial}` : `s:${src ?? ''}`
 
 export const avatarSpecFor = (memberId: string): AvatarSpec => {
   const spec = getMemberAvatar(memberId)
-  // Remote image avatars (Pravatar, DiceBear) are drawn into the atlas like
-  // local faces; loadPhotos fetches them with crossOrigin='anonymous' (a
-  // CORS-blocked request fires onerror and keeps the initials fallback below).
-  // The initial comes from the member's display name, never the hashed avatar
-  // seed (which is numeric).
+  // The source type is preserved end to end (local photo / Pravatar / DiceBear
+  // all render as "image avatars"; 'none' renders initials). The initial comes
+  // from the member's display name, never the hashed avatar seed (numeric).
   return {
-    kind: spec.src ? 'photo' : 'none',
+    kind: spec.kind,
     color: spec.color,
     initial: (spec.name ?? '').trim().charAt(0).toUpperCase() || '?',
     src: spec.src ?? undefined,
@@ -75,6 +87,7 @@ export class MemberAtlas {
   revision = 0
   private onUpdate: (() => void) | null = null
   private loadedPhotos = new Set<string>()
+  private failedPhotos = new Set<string>()
 
   constructor() {}
 
@@ -143,15 +156,18 @@ export class MemberAtlas {
     ctx.stroke()
     // Content is mirrored on the Y axis: the node shader maps the disc's
     // screen-top edge to the cell's bottom row (sigma's camera never flips Y),
-    // so without the mirror every avatar would bake upside down.
+    // so without the mirror every avatar would bake upside down. The initial
+    // is centered mathematically — textAlign/textBaseline do the centering,
+    // no manual offsets.
     ctx.save()
     ctx.translate(cx, cy)
     ctx.scale(1, -1)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-    ctx.font = FONT
+    const t = readCssTokens()
+    ctx.fillStyle = t.surface
+    ctx.font = `${t.weight} ${Math.round(CONTENT * 0.44)}px ${t.family}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(spec.initial, 0, 2)
+    ctx.fillText(spec.initial, 0, 0)
     ctx.restore()
     ctx.restore()
   }
@@ -195,7 +211,7 @@ export class MemberAtlas {
     for (const key of this.map.keys()) {
       const spec = getSpec(key)
       this.bake(key, spec)
-      if (spec.kind === 'photo') this.photoSpecs.push({ key, spec })
+      if (spec.kind !== 'none') this.photoSpecs.push({ key, spec })
     }
     this.revision++
   }
@@ -207,7 +223,7 @@ export class MemberAtlas {
     // Build the full photo spec list deterministically (sorted key order).
     for (const key of [...this.map.keys()].sort()) {
       const spec = getSpec(key)
-      if (spec.kind === 'photo' && !this.photoSpecs.some((p) => p.key === key)) {
+      if (spec.kind !== 'none' && !this.photoSpecs.some((p) => p.key === key)) {
         specs.push({ key, spec })
       }
     }
@@ -223,8 +239,11 @@ export class MemberAtlas {
         this.onUpdate?.()
       }
       img.onerror = () => {
-        // Keep the initials fallback that bakeInitials already drew.
+        // CORS-blocked or failed images keep the initials fallback that
+        // bakeInitials already drew — never a blank colored circle.
         this.loadedPhotos.add(key)
+        this.failedPhotos.add(key)
+        this.onUpdate?.()
       }
       img.src = spec.src
     }
@@ -232,6 +251,14 @@ export class MemberAtlas {
 
   has(key: string | undefined | null): boolean {
     return !!key && this.map.has(key)
+  }
+
+  hasLoaded(key: string | undefined | null): boolean {
+    return !!key && this.loadedPhotos.has(key)
+  }
+
+  hasFailed(key: string | undefined | null): boolean {
+    return !!key && this.failedPhotos.has(key)
   }
 
   region(key: string | undefined | null): AtlasRegion | undefined {

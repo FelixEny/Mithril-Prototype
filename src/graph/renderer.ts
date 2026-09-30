@@ -2,9 +2,10 @@ import { Sigma } from 'sigma'
 import Graph from 'graphology'
 import { createNodeCompoundProgram } from 'sigma/rendering'
 import { buildPopulation, avatarAttrsOf, clusterColorOf, type MemberFilterLike } from './build'
-import { MemberAtlas, avatarSpecFor, avatarKeyOf, type AvatarSpec } from './textures'
+import { MemberAtlas, avatarKeyFor, avatarSpecFor, avatarKeyOf, type AvatarSpec } from './textures'
 import { createMemberNodeProgram } from './programs/node'
 import { NodeHaloProgram } from './programs/halo'
+import { getMemberAvatar, type AvatarKind } from '../avatars'
 import type { RelationshipsData, StrengthLabel } from '../relationships'
 
 export type GraphFilter = 'all' | 'strong' | 'mid' | 'weak'
@@ -94,6 +95,15 @@ export const hexMix = (a: string, b: string, t: number): string => {
 export interface GraphEngineHandlers {
   onSelect: (id: string | null) => void
   onHover?: (id: string | null, pos: { x: number; y: number } | null) => void
+  onAvatarDiagnostics?: (d: AvatarDiagnostics) => void
+}
+
+export interface AvatarDiagnostics {
+  total: number
+  localPhotos: { total: number; loaded: number; failed: number }
+  pravatar: { total: number; loaded: number; failed: number }
+  dicebear: { total: number; loaded: number; failed: number }
+  initials: number
 }
 
 type NodeAttrs = {
@@ -108,7 +118,7 @@ type NodeAttrs = {
   bridge: boolean
   mostConnected: boolean
   avatarKey?: string
-  avatarKind?: 'none' | 'photo'
+  avatarKind?: AvatarKind
   avatarColor?: string
   clusterColor?: string
   haloColor?: string
@@ -136,6 +146,7 @@ export class GraphEngine {
   private selectedId: string | null = null
   private searchQuery = ''
   private importantIds = new Set<string>()
+  private popIds: string[] = []
 
   private nbsCache = new Map<string, Set<string>>()
   // Zoom-graduated edge reveal tier (0 fit / 1 mid / 2 deep), refreshed from
@@ -269,6 +280,7 @@ export class GraphEngine {
 
     // Atlas: claim + bake initials synchronously; photos decode async.
     this.atlas = new MemberAtlas()
+    this.popIds = pop.members.map((m) => m.id)
     const keySpec = new Map<string, AvatarSpec>()
     for (const m of pop.members) {
       const spec = avatarSpecFor(m.id)
@@ -287,8 +299,10 @@ export class GraphEngine {
         this.photoRebuildTimer = null
         if (gen !== this.populationGen) return
         this.reRegisterPrograms()
+        this.emitAvatarDiagnostics()
       }, 150)
     })
+    this.emitAvatarDiagnostics()
 
     // Graph: nodes + attributed edges (rank by score desc).
     const graph = new Graph<NodeAttrs, EdgeAttrs>()
@@ -470,6 +484,40 @@ export class GraphEngine {
     return this.sigma
   }
 
+  // --- Avatar diagnostics (dev only) ---------------------------------------
+
+  /** Per-member avatar pipeline counts for the current population — orginal
+   *  kinds preserved, loaded/failed resolved from the atlas. */
+  getAvatarDiagnostics(): AvatarDiagnostics {
+    const d: AvatarDiagnostics = {
+      total: this.popIds.length,
+      localPhotos: { total: 0, loaded: 0, failed: 0 },
+      pravatar: { total: 0, loaded: 0, failed: 0 },
+      dicebear: { total: 0, loaded: 0, failed: 0 },
+      initials: 0,
+    }
+    for (const id of this.popIds) {
+      const kind = getMemberAvatar(id).kind
+      const key = avatarKeyFor(id)
+      if (kind === 'none') {
+        d.initials++
+        continue
+      }
+      const bucket = kind === 'photo' ? d.localPhotos : kind === 'pravatar' ? d.pravatar : d.dicebear
+      bucket.total++
+      if (this.atlas.hasFailed(key)) {
+        bucket.failed++
+      } else if (this.atlas.hasLoaded(key)) {
+        bucket.loaded++
+      }
+    }
+    return d
+  }
+
+  private emitAvatarDiagnostics(): void {
+    this.handlers.onAvatarDiagnostics?.(this.getAvatarDiagnostics())
+  }
+
   // --- Hover pill -----------------------------------------------------------
 
   private motionMs(ms: number): number {
@@ -538,8 +586,12 @@ export class GraphEngine {
     const q = this.searchQuery.trim().toLowerCase()
     const hit = !!q && (attrs.name.toLowerCase().includes(q) || (attrs.username ?? '').toLowerCase().includes(q))
     const m = (() => {
+      // The focused member (hovered or selected) keeps its avatar no matter
+      // what: search results, non-matches and focus dimming must never hide
+      // or replace it.
+      if (focusId === node) return true
       if (q && !hit) return false
-      if (focusId && node !== focusId && !this.neighborsOf(focusId).has(node)) return false
+      if (focusId && !this.neighborsOf(focusId).has(node)) return false
       return true
     })()
 
