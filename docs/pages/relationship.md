@@ -496,6 +496,23 @@ At Overview each member is a dot tinted with its cluster color, so community
 structure still reads through the clusters and the cluster halo wash. Bridge
 rings remain visible at every level.
 
-Focusing, selecting, or searching a member overrides LOD: that member — and its
-ego view or search results — always renders at full avatar detail with a label,
-so it remains identifiable at any zoom.
+Selecting or searching a member overrides LOD: that member — and its ego view
+or search results — always renders at full avatar detail with a label, so it
+remains identifiable at any zoom. Hover does **not** override LOD.
+
+Hover and selection are deliberately separate interaction models:
+
+- **Hover** emphasizes only the hovered member: its name is revealed below its
+  avatar at every level (including Overview dots) and rendered semi-bold, and a
+  real avatar (Mid/Detail, not a dim dot) swells 8%. It never dims other members,
+  recolors or hides relationships, changes other nodes or any halo, draws a ring,
+  or overrides LOD.
+- **Selection** (click) opens the member popup and emphasizes that member's
+  direct relationships only, keeping the strong / mid / weak edge semantics.
+  Strength is carried by edge **color alone** - strong green, mid amber, weak
+  red - at a single constant width (`STRENGTH_W`, 2px, matching the legend
+  swatches), so thickness never competes with hue. Every edge that is not
+  incident to the selected member stays hidden; no neutral web is left behind
+  the ego view. While a member is selected, hover is fully suppressed: moving
+  over another member changes nothing. Closing the popup restores the normal
+  unselected state and hover behavior.

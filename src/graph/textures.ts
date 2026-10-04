@@ -1,4 +1,5 @@
 import { avatarInitialSize, getMemberAvatar, type AvatarKind } from '../avatars'
+import { readCssVar } from './tokens'
 
 // Baked texture atlas for member avatars.
 //
@@ -29,14 +30,13 @@ let cssTokens: {
 } | null = null
 function readCssTokens(): { family: string; weight: string; surface: string; opticalLift: number } {
   if (cssTokens) return cssTokens
-  const root = getComputedStyle(document.documentElement)
   cssTokens = {
-    family: root.getPropertyValue('--font-family').trim() || 'Geist, sans-serif',
-    weight: root.getPropertyValue('--font-weight-semibold').trim() || '600',
-    surface: root.getPropertyValue('--surface-primary').trim() || '#FFFFFF',
+    family: readCssVar('--font-family', 'Geist, sans-serif'),
+    weight: readCssVar('--font-weight-semibold', '600'),
+    surface: readCssVar('--surface-primary', '#FFFFFF'),
     // Declared in em (--avatar-initial-optical-lift); 1em is the glyph size
     // here, so the numeric part converts straight to px by scaling the glyph.
-    opticalLift: parseFloat(root.getPropertyValue('--avatar-initial-optical-lift')) || 0,
+    opticalLift: parseFloat(readCssVar('--avatar-initial-optical-lift', '0')) || 0,
   }
   return cssTokens
 }
@@ -231,7 +231,10 @@ export class MemberAtlas {
     ctx.translate(cx, cy)
     ctx.scale(1, -1)
     const { width, height } = img
-    const scale = Math.max(d / width, d / height)
+    // The shader samples only the cell's central half (see bake()), so cover-fit
+    // to that sampled diameter or the disc renders the crop at ~2x zoom.
+    const vis = CONTENT / 2
+    const scale = Math.max(vis / width, vis / height)
     const iw = width * scale
     const ih = height * scale
     ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih)

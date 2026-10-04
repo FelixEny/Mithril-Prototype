@@ -3,15 +3,13 @@ import Graph from 'graphology'
 import { createNodeCompoundProgram } from 'sigma/rendering'
 import { buildPopulation, avatarAttrsOf, clusterColorOf, type MemberFilterLike } from './build'
 import { MemberAtlas, avatarKeyFor, avatarSpecFor, avatarKeyOf, type AvatarSpec } from './textures'
+import { readCssVar, readCssPx } from './tokens'
 import { createMemberNodeProgram } from './programs/node'
 import { NodeHaloProgram } from './programs/halo'
 import { getMemberAvatar, type AvatarKind } from '../avatars'
 import type { RelationshipsData, StrengthLabel } from '../relationships'
 
 export type GraphFilter = 'all' | 'strong' | 'mid' | 'weak'
-
-export const WORLD_W = 1000
-export const WORLD_H = 475
 
 // Avatar disc radii (world units) by degree. Compact on purpose: at fit zoom
 // one world unit is ~1 css px, so members read 18-40px across and the
@@ -32,6 +30,10 @@ const AVATAR_MAX_R_PX = 26
 // Focused member emphasis (Marvel: size x1.75; ours starts smaller, x1.5
 // under the same ceiling reads the same).
 const FOCUS_GROW = 1.5
+// Hover emphasis: a real avatar (Mid/Detail, not a dim dot) swells 8% while
+// hovered. Applied on top of the resting ceiling so the full growth is visible
+// even when the resting avatar is already capped.
+const HOVER_GROW = 1.08
 
 // Zoom-graduated edge reveal by k = 1 / camera.ratio. Only the COUNT changes
 // with zoom — every visible edge holds a constant screen width, so zooming
@@ -51,8 +53,9 @@ const LOD_DOT_R_PX = 2.5
 const AVATAR_MID_R_PX = 16
 
 // Constant screen widths (css px) — the edge reducer converts these to world
-// sizes every refresh, cancelling sigma's zoom growth exactly.
-const EDGE_W: Record<'default' | StrengthLabel, number> = { default: 1.1, strong: 2.2, mid: 1.5, weak: 1.0 }
+// sizes every refresh, cancelling sigma's zoom growth exactly. The resting web
+// has one width; selected relationships use STRENGTH_W above.
+const EDGE_W_DEFAULT = 1.25
 
 // Ring thickness (css px), painted OUTSIDE the avatar edge. The node shader
 // converts it to world units per frame, so it holds this thickness at any
@@ -74,7 +77,7 @@ const COLORS = {
   strong: '#42BB00',
   mid: '#FDAB00',
   weak: '#FF3838',
-  faint: '#E8EAF3',
+  faint: '#E3E5EE',
   brand: '#693CF3',
   bridge: '#009A47',
   dim: '#E8EAF0',
@@ -86,7 +89,10 @@ const STRENGTH_COLOR: Record<StrengthLabel, string> = {
   mid: COLORS.mid,
   weak: COLORS.weak,
 }
-const STRENGTH_PX: Record<StrengthLabel, number> = { strong: 2.2, mid: 1.5, weak: 1.0 }
+// Selected-member relationship width (css px). One width for every strength
+// level: color alone carries strong / mid / weak, so thickness never competes
+// with hue. Matches the legend swatch height.
+const STRENGTH_W = 2
 
 export const filterAllows = (f: GraphFilter, label: StrengthLabel): boolean => f === 'all' || f === label
 
@@ -105,6 +111,32 @@ export const hexMix = (a: string, b: string, t: number): string => {
   return `#${((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0')}`
 }
 
+// Member-name typography is token-driven: family, size and weights come from
+// the :root design-system vars. Resolved lazily (first call) and cached so
+// module imports never touch the DOM.
+let labelTypography: {
+  family: string
+  sizePx: number
+  weightRegular: string
+  weightSemibold: string
+} | null = null
+function readLabelTypography(): {
+  family: string
+  sizePx: number
+  weightRegular: string
+  weightSemibold: string
+} {
+  if (!labelTypography) {
+    labelTypography = {
+      family: readCssVar('--font-family', '"Geist", sans-serif'),
+      sizePx: readCssPx('--font-size-12', 12),
+      weightRegular: readCssVar('--font-weight-regular', '400'),
+      weightSemibold: readCssVar('--font-weight-semibold', '600'),
+    }
+  }
+  return labelTypography
+}
+
 // Sigma's built-in disc label anchors names to the RIGHT of the node
 // (`x + size + 3`). Mithril wants names centred BELOW the avatar, so we supply
 // our own renderer using the same font/colour tokens. Coordinates are viewport
@@ -114,18 +146,25 @@ function drawLabelBelow(context: CanvasRenderingContext2D, data: DisplayNode, se
   const color = settings.labelColor?.attribute
     ? data[settings.labelColor.attribute] || settings.labelColor.color || '#6B7280'
     : settings.labelColor?.color || '#6B7280'
+  // Per-node weight (semi-bold on hover/selection/search) overrides the rest
+  // weight; both come from the design-system weight tokens.
+  const weight = data.labelWeight ?? settings.labelWeight
   context.save()
   context.fillStyle = color
-  context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`
+  context.font = `${weight} ${settings.labelSize}px ${settings.labelFont}`
   context.textAlign = 'center'
   context.textBaseline = 'top'
   context.fillText(data.label, data.x, data.y + data.size + 4)
   context.restore()
 }
 
+// Sigma's default hover renderer (drawDiscNodeHover) paints a white rounded
+// box with a black drop shadow to the RIGHT of the hovered node. Mithril's only
+// member name is the below-avatar label, so hover draws nothing extra here.
+function drawNothing(): void {}
+
 export interface GraphEngineHandlers {
   onSelect: (id: string | null) => void
-  onHover?: (id: string | null, pos: { x: number; y: number } | null) => void
   onAvatarDiagnostics?: (d: AvatarDiagnostics) => void
 }
 
@@ -199,14 +238,15 @@ export class GraphEngine {
   // atlas.
   private photoRebuildTimer: ReturnType<typeof setTimeout> | null = null
   private populationGen = 0
-  private suppressClickUntil = 0
-  private drag: { node: string; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null = null
-  // Original layout positions per node id, snapshotted at population build so
-  // a dragged member can be returned home by double-clicking it.
-  private homePos = new Map<string, { x: number; y: number }>()
-  private dragged = new Set<string>()
 
   private resizeObserver: ResizeObserver | null = null
+  // Graph mode flag + a wheel guard for the zoom bounds. Sigma only calls
+  // preventDefault() when a wheel actually changes the camera ratio, so at the
+  // min/max ratio the raw event bubbles to the page and scrolls it. While
+  // interactive we prevent that here so the graph holds until the user leaves
+  // graph mode; the guard is a no-op while idle so the page still scrolls.
+  private interactive = false
+  private wheelGuard = (e: WheelEvent) => { if (this.interactive) e.preventDefault() }
 
   constructor(container: HTMLElement, data: RelationshipsData, handlers: GraphEngineHandlers) {
     this.container = container
@@ -217,10 +257,11 @@ export class GraphEngine {
     this.memberClass = createMemberNodeProgram(this.atlas)
     // Halos render as the first sub-program of the same node draw pass, so
     // every wash sits underneath every avatar (Marvel's compound pattern).
-    // The hover layer keeps the bare member program so the focused member
+    // The hover layer keeps the bare member program so the selected member
     // doesn't get a doubled halo.
     this.programClass = createNodeCompoundProgram([NodeHaloProgram, this.memberClass])
 
+    const typo = readLabelTypography()
     const settings: Record<string, unknown> = {
       defaultNodeType: 'member',
       defaultEdgeType: 'line',
@@ -252,12 +293,17 @@ export class GraphEngine {
       hideEdgesOnMove: true,
       labelColor: { color: '#6B7280' },
       // Names sit centred below the avatar rather than sigma's default
-      // right-of-node placement.
+      // right-of-node placement. Family, size (12px) and the rest weight all
+      // come from design-system tokens; emphasised members override the weight
+      // per node in the reducer.
       defaultDrawNodeLabel: drawLabelBelow,
-      labelFont: '"Inter", "Geist", system-ui, -apple-system, sans-serif',
-      labelWeight: '400',
-      labelSize: 12,
-      labelHoveredSizeRatio: 1,
+      labelFont: typo.family,
+      labelWeight: typo.weightRegular,
+      labelSize: typo.sizePx,
+      // Suppress sigma's default hover box (a white, shadowed name drawn to the
+      // right of the node). Hover is a name-emphasis affordance only, and the
+      // sole member name is the below-avatar label.
+      defaultDrawNodeHover: drawNothing,
       defaultNodeColor: '#693CF3',
     }
 
@@ -268,10 +314,7 @@ export class GraphEngine {
 
     this.bindCaptors()
     this.bindCamera()
-    // Keep the hover pill pinned to its member through camera moves.
-    this.sigma.on('afterRender', () => {
-      this.repositionPill()
-    })
+    this.container.addEventListener('wheel', this.wheelGuard, { passive: false })
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => {
         this.sigma.resize()
@@ -348,15 +391,12 @@ export class GraphEngine {
 
     // Graph: nodes + attributed edges (rank by score desc).
     const graph = new Graph<NodeAttrs, EdgeAttrs>()
-    this.homePos = new Map()
-    this.dragged = new Set()
     for (const m of pop.members) {
       const info = this.data.memberInfo.get(m.id)
       const p = pop.positioned.get(m.id)
       if (!info || !p) continue
       const av = avatarAttrsOf(m.id)
       const clusterColor = clusterColorOf(m.clusterId)
-      this.homePos.set(m.id, { x: p.x, y: p.y })
       graph.addNode(m.id, {
         x: p.x,
         y: p.y,
@@ -385,11 +425,10 @@ export class GraphEngine {
     this.graph = graph
     this.nbsCache.clear()
     // A population swap invalidates any in-flight hover (the hover pointer may
-    // reference a node that no longer exists).
-    if (this.hoveredId) {
-      this.hoveredId = null
-      this.handlers.onHover?.(null, null)
-    }
+    // reference a node that no longer exists); sigma nulls its hovered node
+    // without emitting leaveNode, so reset the cursor here too.
+    this.hoveredId = null
+    this.memberCursor(false)
     this.sigma.setSettings({
       nodeReducer: this.nodeReducer.bind(this),
       edgeReducer: this.edgeReducer.bind(this),
@@ -430,6 +469,9 @@ export class GraphEngine {
   setSelected(id: string | null): void {
     if (this.selectedId === id) return
     this.selectedId = id
+    // Entering the selected state suppresses hover entirely: drop any hover
+    // that was active when the click landed so it can't leak into the ego view.
+    if (id !== null) this.hoveredId = null
     this.sigma.refresh()
   }
 
@@ -444,6 +486,24 @@ export class GraphEngine {
     this.searchQuery = q
     this.nbsCache.clear()
     this.sigma.refresh()
+  }
+
+  /** Gate direct canvas interaction (pan/zoom/hover/node-click). While idle the
+   *  sigma captors are disabled, so the wheel scrolls the page and no member is
+   *  hovered; the idle cursor is set on the container. Activating restores the
+   *  full interaction model and arms the wheel guard so the page can't scroll
+   *  when the camera is pinned at a zoom bound. Direct API calls
+   *  (setHovered/setSelected/etc.) still work while idle so probes and
+   *  programmatic focus are unaffected. */
+  setInteractive(on: boolean): void {
+    this.interactive = on
+    this.sigma.getMouseCaptor().enabled = on
+    this.sigma.getTouchCaptor().enabled = on
+    this.container.classList.toggle('is-idle', !on)
+    if (!on) {
+      this.setHovered(null)
+      this.memberCursor(false)
+    }
   }
 
   searchMatches(): { id: string; name: string; username: string | null; clusterId: number; degree: number }[] {
@@ -497,24 +557,13 @@ export class GraphEngine {
     this.sigma.getCamera().animatedReset({ duration: this.motionMs(500), easing: 'cubicInOut' })
   }
 
-  restore(id: string): boolean {
-    if (!this.graph.hasNode(id)) return false
-    const home = this.homePos.get(id)
-    if (!home) return false
-    const attrs = this.graph.getNodeAttributes(id)
-    if (Math.abs(attrs.x - home.x) + Math.abs(attrs.y - home.y) < 0.001) return false
-    this.graph.mergeNodeAttributes(id, { x: home.x, y: home.y })
-    this.dragged.delete(id)
-    this.sigma.refresh()
-    return true
-  }
-
   destroy(): void {
     if (this.photoRebuildTimer) {
       clearTimeout(this.photoRebuildTimer)
       this.photoRebuildTimer = null
     }
     this.resizeObserver?.disconnect()
+    this.container.removeEventListener('wheel', this.wheelGuard)
     this.sigma.kill()
   }
 
@@ -560,8 +609,6 @@ export class GraphEngine {
     this.handlers.onAvatarDiagnostics?.(this.getAvatarDiagnostics())
   }
 
-  // --- Hover pill -----------------------------------------------------------
-
   private motionMs(ms: number): number {
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 0
@@ -569,20 +616,17 @@ export class GraphEngine {
     return ms
   }
 
-  /** Push the current hover's screen position to React so the name pill tracks
-   *  the member through camera moves and tier refreshes. */
-  private repositionPill(): void {
-    const id = this.hoveredId
-    if (!id || !this.graph.hasNode(id)) return
-    const attrs = this.graph.getNodeAttributes(id)
-    const vp = this.sigma.graphToViewport({ x: attrs.x, y: attrs.y })
-    this.handlers.onHover?.(id, { x: vp.x, y: vp.y })
-  }
-
   // --- Reducers ------------------------------------------------------------
 
   private focus(): string | null {
-    return this.hoveredId ?? this.selectedId
+    return this.selectedId
+  }
+
+  /** Toggle the member pointer cursor on the graph container. The background
+   *  keeps its grab/grabbing pan cursor because the class is only set while a
+   *  clickable member is under the pointer. */
+  private memberCursor(on: boolean): void {
+    this.container.classList.toggle('is-member-hover', on)
   }
 
   private neighborsOf(id: string): Set<string> {
@@ -590,9 +634,9 @@ export class GraphEngine {
     if (nb) return nb
     nb = new Set<string>()
     const graph = this.graph
-    graph.forEachOutboundEdge(id, (edge, _attrs, srcKey, tgtKey) => {
-      nb.add(srcKey === id ? tgtKey : srcKey)
-    })
+    // Direct relationships are symmetric: count an edge in either direction
+    // (the graph is mixed/directed, so forEachOutboundEdge would miss half).
+    for (const neighbor of graph.neighbors(id)) nb.add(neighbor)
     this.nbsCache.set(id, nb)
     return nb
   }
@@ -628,19 +672,19 @@ export class GraphEngine {
     const q = this.searchQuery.trim().toLowerCase()
     const hit = !!q && (attrs.name.toLowerCase().includes(q) || (attrs.username ?? '').toLowerCase().includes(q))
     const m = (() => {
-      // The focused member (hovered or selected) keeps its avatar no matter
-      // what: search results, non-matches and focus dimming must never hide
-      // or replace it.
+      // The selected member keeps its avatar no matter what: search results,
+      // non-matches and ego dimming must never hide or replace it. Hover is
+      // deliberately absent here — hovering never dims or reveals anything.
       if (focusId === node) return true
       if (q && !hit) return false
       if (focusId && !this.neighborsOf(focusId).has(node)) return false
       return true
     })()
 
-    // Focus (hover/selection) or an active search turns LOD off: the ego view
-    // and search results keep full avatars and names at every zoom, so the
-    // focused/searched member stays identifiable. LOD only shapes the resting,
-    // unfiltered view.
+    // An active search or a selection turns LOD off: the ego view and search
+    // results keep full avatars and names at every zoom, so the selected or
+    // searched member stays identifiable. Hover does NOT override LOD, and LOD
+    // otherwise only shapes the resting, unfiltered view.
     const lodTier = focusId !== null || q !== '' ? 2 : this.revealTier
 
     const dim = !m
@@ -648,18 +692,21 @@ export class GraphEngine {
     const cap = this.nodeWorldForRadius(AVATAR_MAX_R_PX)
 
     const selected = node === this.selectedId
-    const hovered = node === this.hoveredId
+    // Hover emphasis is fully suppressed while a member is selected.
+    const hovered = node === this.hoveredId && this.selectedId === null
     const important = this.importantIds.has(node)
     const labelable = this.labelIds.has(node)
     const isFocus = focusId !== null && node === focusId
     const nbs = focusId !== null && !isFocus ? this.neighborsOf(focusId) : null
     const isNeighbor = nbs !== null && nbs.has(node)
 
-    // Ring: selected > hovered > search hit > bridge. Widths are css px,
-    // converted to device px here and kept constant on screen by the shader.
+    // Ring: selected > search hit > bridge. Widths are css px, converted to
+    // device px here and kept constant on screen by the shader. Hover draws no
+    // ring — its emphasis is the member's own name (semi-bold) plus a small
+    // avatar swell, both applied below.
     let ring: [number, number, number, number] | null = null
     let ringWidth = 0
-    if (selected || hovered || (q && hit)) {
+    if (selected || (q && hit)) {
       ring = [0x69 / 255, 0x3c / 255, 0xf3 / 255, 1]
       ringWidth = RING_W * this.devicePx()
     } else if (attrs.bridge) {
@@ -671,7 +718,8 @@ export class GraphEngine {
     // cluster wash; the focused member grows (under the ceiling) with a strong
     // halo; neighbors keep a medium wash; everyone else collapses to a faint
     // dot with no halo. Halo sizes derive from the tier-independent avatar size
-    // so the cluster wash survives the Overview collapse to dots.
+    // so the cluster wash survives the Overview collapse to dots. Hover swells
+    // only a real avatar (see below), never the wash.
     const avatarSize = Math.min(base, cap)
     let size: number
     let haloSize = 0
@@ -703,8 +751,15 @@ export class GraphEngine {
       haloAlpha = HALO_ALPHA
     }
 
-    // Overview replaces avatars with cluster-colored dots. Focus/selection/
-    // search force lodTier 2 above, so those nodes never become dots here.
+    // Hover swell: only a real avatar grows (Mid/Detail, not a dim dot). The
+    // halo was sized from the resting avatar above, so it stays put; the small
+    // overshoot past the resting ceiling keeps the full 8% visible even when the
+    // avatar is already capped. Overview keeps its constant dot, and selection
+    // suppresses `hovered`, so neither swells here.
+    if (hovered && !dim && lodTier >= 1) size *= HOVER_GROW
+
+    // Overview replaces avatars with cluster-colored dots. Selection/search
+    // force lodTier 2 above, so those nodes never become dots here.
     const isDot = lodTier === 0 && !dim
     const opaqueColor = dim
       ? COLORS.dim
@@ -715,12 +770,15 @@ export class GraphEngine {
           : COLORS.surface
 
     // Labels: Overview names nothing, Mid names only bridges / top-30 /
-    // most-connected members, Detail names every visible member. Focused,
-    // hovered and search-hit members are always labelled. The grid prunes
-    // collisions as before. Size stays 12px at any zoom.
+    // most-connected members, Detail names every visible member. Hovering a
+    // member always reveals its own name (at any LOD), and selected / search-hit
+    // members are always labelled. The grid prunes collisions as before, but
+    // hovered/selected/hit labels are forced past it. Size stays 12px; emphasis
+    // (hover / selection / search hit) bumps the weight to semi-bold.
+    const typo = readLabelTypography()
     const hot = selected || hovered || (q && hit)
     const importantLabel = lodTier === 1 && labelable
-    const showLabel = !dim && (lodTier >= 2 || importantLabel)
+    const showLabel = !dim && (lodTier >= 2 || importantLabel || hovered)
     const forceLabel = hot || importantLabel || (lodTier >= 2 && important)
 
     return {
@@ -729,6 +787,7 @@ export class GraphEngine {
       size,
       color: opaqueColor,
       label: showLabel ? attrs.name : '',
+      labelWeight: hot ? typo.weightSemibold : typo.weightRegular,
 
       avatarKey: dim || isDot ? '' : (attrs.avatarKey ?? ''),
       haloColor: attrs.haloColor ?? attrs.clusterColor ?? '#693CF3',
@@ -738,7 +797,7 @@ export class GraphEngine {
       ring,
       ringWidth,
       forceLabel,
-      zIndex: selected ? 3 : hovered ? 2 : q && hit ? 1 : undefined,
+      zIndex: selected ? 3 : q && hit ? 1 : undefined,
     }
   }
 
@@ -764,9 +823,9 @@ export class GraphEngine {
       targetHit = (ta.name ?? '').toLowerCase().includes(q) || (ta.username ?? '').toLowerCase().includes(q)
     }
 
-    // Ego-focus (Marvel's click model, driven by hover OR selection): only
-    // the focused member's own connections stay, strength-colored at
-    // constant width; everything else hides.
+    // Ego-focus (Marvel's click model, driven by SELECTION only): only the
+    // selected member's own connections stay, strength-colored at constant
+    // width; everything else hides. Hover never affects edges.
     if (focusId) {
       const incident = sId === focusId || tId === focusId
       if (!incident) return { hidden: true, size: 0 }
@@ -775,7 +834,7 @@ export class GraphEngine {
       return {
         hidden: false,
         color: STRENGTH_COLOR[attrs.label],
-        size: this.edgeWorldFor(STRENGTH_PX[attrs.label]),
+        size: this.edgeWorldFor(STRENGTH_W),
         label: '',
       }
     }
@@ -800,13 +859,14 @@ export class GraphEngine {
     if (k < REVEAL_K1) {
       return { hidden: false, color: COLORS.faint, size: this.edgeWorldFor(1.0), label: '' }
     }
-    return { hidden: false, color: COLORS.edgeDefault, size: this.edgeWorldFor(EDGE_W.default), label: '' }
+    return { hidden: false, color: COLORS.edgeDefault, size: this.edgeWorldFor(EDGE_W_DEFAULT), label: '' }
   }
 
   // --- Sigma events --------------------------------------------------------
 
   private bindCamera(): void {
     this.sigma.getCamera().on('updated', ({ ratio }) => {
+      const ratioChanged = ratio !== this.camRatio
       this.camRatio = ratio
       this.scaleBase = this.sigma.scaleSize(1)
       const k = 1 / ratio
@@ -814,6 +874,13 @@ export class GraphEngine {
       if (tier !== this.revealTier) {
         this.revealTier = tier
         this.sigma.refresh()
+      } else if (ratioChanged) {
+        // Node/edge world sizes derive their screen size from the scale
+        // captured above, so a stale snapshot lets capped avatars drift off
+        // their ceiling between refreshes and then snap when the next hover
+        // refresh recomputes them. Recompute on ratio changes too, coalesced
+        // to at most one reprocess per frame.
+        this.sigma.scheduleRefresh()
       }
     })
   }
@@ -822,67 +889,40 @@ export class GraphEngine {
     const sigma = this.sigma
 
     sigma.on('enterNode', ({ node }) => {
+      // A member is clickable, so signal it with the pointer cursor. This is
+      // independent of the visual hover state (which selection suppresses).
+      this.memberCursor(true)
+      // While a member is selected, hover is fully suppressed: moving over
+      // another member must not change focus, labels, node states or edges.
+      if (this.selectedId !== null) return
       this.setHovered(node)
-      this.repositionPill()
     })
     sigma.on('leaveNode', () => {
+      this.memberCursor(false)
       this.setHovered(null)
-      this.handlers.onHover?.(null, null)
+    })
+    // Guard: if the pointer leaves the canvas straight off a node, reset the
+    // cursor so the member-pointer state can't stick.
+    sigma.on('leaveStage', () => {
+      this.memberCursor(false)
     })
 
     sigma.on('clickNode', ({ node, event }) => {
       event.preventSigmaDefault()
-      if (Date.now() < this.suppressClickUntil) return
       this.handlers.onSelect(node)
     })
     sigma.on('clickStage', () => {
       this.handlers.onSelect(null)
     })
-    sigma.on('doubleClickNode', ({ node, event }) => {
+    // Double-click fits the view anywhere (members are not draggable).
+    sigma.on('doubleClickNode', ({ event }) => {
       event.preventSigmaDefault()
-      // Any dragged node can be returned home by double-clicking it.
-      this.restore(node)
-    })
-    sigma.on('doubleClickStage', () => {
       this.fit()
     })
-
-    // Node dragging.
-    sigma.on('downNode', (e) => {
-      e.preventSigmaDefault()
-      const attrs = sigma.getGraph().getNodeAttributes(e.node)
-      this.drag = { node: e.node, sx: e.event.x, sy: e.event.y, ox: attrs.x, oy: attrs.y, moved: false }
-      sigma.setCustomBBox(sigma.getBBox())
+    sigma.on('doubleClickStage', ({ event }) => {
+      event.preventSigmaDefault()
+      this.fit()
     })
-    sigma.on('moveBody', (e) => {
-      const d = this.drag
-      if (!d) return
-      e.preventSigmaDefault()
-      const p = sigma.viewportToGraph({ x: e.event.x, y: e.event.y })
-      if (Math.abs(p.x - d.ox) + Math.abs(p.y - d.oy) > 2) {
-        d.moved = true
-        this.dragged.add(d.node)
-      }
-      const node = d.node
-      const clamped = {
-        x: Math.min(WORLD_W - 8, Math.max(8, p.x)),
-        y: Math.min(WORLD_H - 8, Math.max(8, p.y)),
-      }
-      if (sigma.getGraph().hasNode(node)) {
-        sigma.getGraph().mergeNodeAttributes(node, clamped)
-      }
-    })
-    const endDrag = () => {
-      const d = this.drag
-      this.drag = null
-      sigma.setCustomBBox(null)
-      if (d?.moved) {
-        this.suppressClickUntil = Date.now() + 400
-      }
-    }
-    sigma.on('upNode', endDrag)
-    sigma.on('upStage', endDrag)
-    sigma.on('leaveStage', endDrag)
   }
 }
 

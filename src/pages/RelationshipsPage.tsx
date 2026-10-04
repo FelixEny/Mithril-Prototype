@@ -70,6 +70,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   }, [popOpen])
 
   const pickMatch = (id: string) => {
+    graphRef.current?.activate()
     setSelected(id)
     graphRef.current?.flyTo(id)
     setPopOpen(false)
@@ -103,8 +104,9 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, [fullscreen])
   // Page stays mounted across navigation; exit fullscreen (and restore body
-  // overflow) the moment the graph is no longer the active page.
-  useEffect(() => { if (!active) setFullscreen(false) }, [active])
+  // overflow) the moment the graph is no longer the active page, and return
+  // the graph to its idle (non-interactive) state.
+  useEffect(() => { if (!active) { setFullscreen(false); graphRef.current?.deactivate() } }, [active])
   useEffect(() => {
     if (!filterOpen) return
     const close = (e: MouseEvent) => { if (flowRef.current && !flowRef.current.contains(e.target as Node)) { setFilterOpen(false); setFlowSub(null) } }
@@ -143,12 +145,13 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   const handleSelect = (id: string | null) => {
     if (id === null) { clearSelection(); return }
     if (!memVisible(id, memberFilter)) return
-    // Click preserves the hover/focus view: no camera move, the ego-focus
-    // reducers keep the member and its connections lit while the popup opens.
+    // Click selects the member: no camera move, the ego-focus reducers light
+    // the member and its direct relationships while the popup opens.
     setSelected(id)
   }
 
   const applyConn = (v: number | null) => {
+    graphRef.current?.activate()
     const mf: MemberFilter = { ...memberFilter, minDegree: v }
     setMemberFilter(mf)
     if (selected && !memVisible(selected, mf)) clearSelection()
@@ -156,6 +159,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   }
 
   const applyCluster = (c: number | null) => {
+    graphRef.current?.activate()
     const mf: MemberFilter = { ...memberFilter, cluster: c }
     setMemberFilter(mf)
     if (selected && !memVisible(selected, mf)) clearSelection()
@@ -222,11 +226,11 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
         </div>
         <div className="graph-controls">
           {selected && <div className="graph-select" ref={selectRef}>
-            <button onClick={() => setMenuOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={menuOpen}>{activeLabel}<CaretDown size={16} /></button>
-            {menuOpen && <Menu>{FILTER_OPTIONS.map((o) => <MenuItem key={o.v} label={o.label} selected={o.v === filter} onSelect={() => { setFilter(o.v); setMenuOpen(false) }} />)}</Menu>}
+            <button onClick={() => { graphRef.current?.activate(); setMenuOpen((o) => !o) }} aria-haspopup="listbox" aria-expanded={menuOpen}>{activeLabel}<CaretDown size={16} /></button>
+            {menuOpen && <Menu>{FILTER_OPTIONS.map((o) => <MenuItem key={o.v} label={o.label} selected={o.v === filter} onSelect={() => { graphRef.current?.activate(); setFilter(o.v); setMenuOpen(false) }} />)}</Menu>}
           </div>}
           <div className="graph-filter" ref={flowRef}>
-            <button className="graph-filter-btn" aria-expanded={filterOpen} onClick={() => { setFilterOpen((o) => !o); setFlowSub(null) }}><FunnelSimple size={16} />Filter</button>
+            <button className="graph-filter-btn" aria-expanded={filterOpen} onClick={() => { graphRef.current?.activate(); setFilterOpen((o) => !o); setFlowSub(null) }}><FunnelSimple size={16} />Filter</button>
             {filterOpen && <div className="menu graph-filter-menu">
               <div className="menu-sub-row" onMouseEnter={() => setFlowSub('conn')}>
                 <i className="menu-sub-icon"><Graph size={16} /></i><span className="menu-label">No. of connections</span><CaretRight size={14} className="caret" />
@@ -244,7 +248,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
             </div>}
           </div>
           <div className="graph-search" ref={popRef}>
-            <MagnifyingGlass size={16} /><input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={onSearchKeyDown} onFocus={() => { if (search.trim() !== '') setPopOpen(true) }} placeholder="Search by username" aria-label="Search by username" />{search !== '' && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => { setSearch(''); searchRef.current?.focus() }}><X size={16} /></button>}
+            <MagnifyingGlass size={16} /><input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={onSearchKeyDown} onFocus={() => { graphRef.current?.activate(); if (search.trim() !== '') setPopOpen(true) }} placeholder="Search by username" aria-label="Search by username" />{search !== '' && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => { setSearch(''); searchRef.current?.focus() }}><X size={16} /></button>}
             {popOpen && search.trim() !== '' && (
               <Menu className="graph-search-menu" role="listbox">
                 {popMatches.length === 0 && <MenuItem label="No members found" disabled />}
@@ -263,7 +267,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
               </Menu>
             )}
           </div>
-          <button className="graph-fullscreen-btn" aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreen} onClick={() => setFullscreen((f) => !f)}>{fullscreen ? <ArrowsIn size={16} /> : <ArrowsOut size={16} />}</button>
+          <button className="graph-fullscreen-btn" aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} aria-pressed={fullscreen} onClick={() => { graphRef.current?.activate(); setFullscreen((f) => !f) }}>{fullscreen ? <ArrowsIn size={16} /> : <ArrowsOut size={16} />}</button>
         </div>
       </div>
       <div className="graph-filters">

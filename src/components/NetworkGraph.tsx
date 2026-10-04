@@ -1,9 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { ArrowsOutSimple, Info, MagnifyingGlass, Minus, Plus } from '@phosphor-icons/react'
+import { ArrowsOutSimple, CursorClick, Info, MagnifyingGlass, Minus, Plus } from '@phosphor-icons/react'
 import type { RelationshipsData } from '../relationships'
 import { GraphEngine, type GraphFilter, type AvatarDiagnostics } from '../graph/renderer'
-import { Avatar } from './Avatar'
-import { getMemberAvatar } from '../avatars'
 import { MemberPopup } from './MemberPopup'
 
 // Dev-only: log avatar pipeline counts as they change (identical snapshots are
@@ -36,6 +34,8 @@ export interface SearchMatch {
 export interface NetworkGraphHandle {
   flyTo: (id: string) => void
   matches: () => SearchMatch[]
+  activate: () => void
+  deactivate: () => void
 }
 
 function SpanTip({ aria, title, body }: { aria: string; title: string; body: string }) {
@@ -64,7 +64,11 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
   const canvasRef = useRef<HTMLDivElement>(null)
   const [engine, setEngine] = useState<GraphEngine | null>(null)
   const [loading, setLoading] = useState(true)
-  const [hover, setHover] = useState<{ id: string; name: string; username: string | null; x: number; y: number } | null>(null)
+  // Graph mode: idle by default. Direct canvas interaction is gated behind a
+  // click on the grey panel; clicking outside the card or pressing Escape
+  // returns to the page. Control use (search, filter, zoom, fullscreen) also
+  // activates via the imperative handle.
+  const [active, setActive] = useState(false)
 
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
@@ -79,16 +83,9 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
     if (!rootRef.current || !canvasRef.current) return
     const instance = new GraphEngine(canvasRef.current, data, {
       onSelect: (id) => onSelectRef.current(id),
-      onHover: (id, pos) => {
-        if (!id || !pos) {
-          setHover(null)
-          return
-        }
-        const info = instance.getGraph().getNodeAttributes(id)
-        setHover({ id, name: info.name, username: info.username ?? null, x: pos.x, y: pos.y })
-      },
       onAvatarDiagnostics: import.meta.env.DEV ? logAvatarDiagnostics : undefined,
     })
+    instance.setInteractive(false)
     lastPop.current = { data, mf: { ...memberFilter } }
     setEngine(instance)
     // Paint the loading shell first, then drop it once the freshly-built graph
@@ -110,7 +107,36 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
   useImperativeHandle(ref, () => ({
     flyTo: (id) => engine?.flyTo(id),
     matches: () => engine?.searchMatches() ?? [],
+    activate: () => setActive(true),
+    deactivate: () => setActive(false),
   }), [engine])
+
+  useEffect(() => {
+    engine?.setInteractive(active)
+  }, [engine, active])
+
+  // Leaving graph mode: a press outside the graph card, or Escape. Escape is
+  // ignored while a text field has focus so the search box can close its own
+  // popover first. Selection and its popup are deliberately preserved.
+  useEffect(() => {
+    if (!active) return
+    const card = rootRef.current?.closest('.graph-card') as HTMLElement | null
+    const onDown = (e: MouseEvent) => {
+      if (card && e.target instanceof Node && !card.contains(e.target)) setActive(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const el = document.activeElement
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)) return
+      setActive(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [active])
 
   // Population source / member-filter rebuild.
   useEffect(() => {
@@ -153,9 +179,10 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
   }, [engine])
 
   const isEmpty = engine?.isEmpty() ?? false
+  const activateFromPanel = () => { if (!active) setActive(true) }
 
   return (
-    <div className="graph-wrap" ref={rootRef}>
+    <div className="graph-wrap" ref={rootRef} onPointerDown={activateFromPanel}>
       <div className="graph-canvas" ref={canvasRef} role="img" aria-label="Relationship graph" />
       {loading && (
         <div className="graph-loading" role="status" aria-label="Building graph">
@@ -165,22 +192,16 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
       )}
       {!loading && !isEmpty && (
         <div className="graph-hint">
-          <MagnifyingGlass size={14} />
-          <span>Search to find members &middot; drag to explore &middot; double-click a member to reset</span>
+          {active
+            ? <><MagnifyingGlass size={14} /><span>Search to find members &middot; drag to pan &middot; double-click to fit</span></>
+            : <><CursorClick size={14} /><span>Click to interact with the graph</span></>}
         </div>
       )}
       {!loading && isEmpty && <div className="graph-empty">No members match the current filters</div>}
-      {hover && (
-        <div className="graph-hover-pill" style={{ left: hover.x, top: hover.y }}>
-          <Avatar spec={getMemberAvatar(hover.id)} name={hover.name} size={24} />
-          <span className="graph-pill-name">{hover.name}</span>
-          {hover.username && <span className="graph-pill-user">@{hover.username}</span>}
-        </div>
-      )}
       <div className="graph-zoom">
-        <button aria-label="Zoom in" onClick={() => engine?.zoomIn()}><Plus size={16} /></button>
-        <button aria-label="Zoom out" onClick={() => engine?.zoomOut()}><Minus size={16} /></button>
-        <button aria-label="Fit to view" onClick={() => engine?.fit()}><ArrowsOutSimple size={16} /></button>
+        <button aria-label="Zoom in" onClick={() => { setActive(true); engine?.zoomIn() }}><Plus size={16} /></button>
+        <button aria-label="Zoom out" onClick={() => { setActive(true); engine?.zoomOut() }}><Minus size={16} /></button>
+        <button aria-label="Fit to view" onClick={() => { setActive(true); engine?.fit() }}><ArrowsOutSimple size={16} /></button>
       </div>
       {selected && <MemberPopup data={data} id={selected} onClose={() => onSelect(null)} />}
       <div className="graph-legend">

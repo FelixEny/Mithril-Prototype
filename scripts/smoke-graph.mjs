@@ -27,7 +27,7 @@ const canvases = (dom.match(/<canvas\b[^>]*>/g) || []).length
 const layers = ['sigma-edges', 'sigma-edgeLabels', 'sigma-nodes', 'sigma-labels', 'sigma-hovers', 'sigma-hoverNodes', 'sigma-mouse']
 const checks = [
   ['page rendered', dom.includes('class="page-panel"')],
-  ['graph canvas host present', dom.includes('class="graph-canvas"')],
+  ['graph canvas host present', dom.includes('graph-canvas')],
   ['all 7 sigma layers rendered', layers.every((l) => dom.includes(`class="${l}"`))],
   ['at least 6 gl layers', canvases >= 6, `got ${canvases}`],
   ['population non-empty (hint rendered)', dom.includes('class="graph-hint"')],
