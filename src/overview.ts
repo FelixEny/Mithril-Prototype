@@ -193,3 +193,4 @@ export function greeting(now: Date): string {
   if (h < 18) return 'Good afternoon'
   return 'Good evening'
 }
+export function overviewSparkBars(){return {total:[],active:[],newMembers:[],leftMembers:[]}}
