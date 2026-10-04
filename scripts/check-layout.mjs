@@ -2,7 +2,7 @@
 //
 // Loads the real app modules through vite's SSR runner (no new tooling;
 // handles TS + `?url` imports) with a fetch shim reading the mock JSON corpus
-// from disk, then checks the REAL 30d/90d populations:
+// from disk, then checks the REAL 7/14/30/90d populations:
 //   1. determinism: two runLayout runs -> byte-identical positions (required)
 //   2. validity: every member positioned, finite, inside the world rect (required)
 //   3. rebuild freshness: filtered populations position exactly their members (required)
@@ -10,7 +10,11 @@
 //   5. structure: connected pairs closer on average than random pairs (required)
 //   6. timing: wall ms reported (fails over budget)
 //
-// Run: node scripts/check-layout.mjs [days...] (default: 30 90; dev server NOT required)
+// Run: node scripts/check-layout.mjs [days...] (default: 7 14 30 90; dev server NOT required)
+//
+// Every shipped range is checked because the seed ring scales its radius with
+// graph density (RING_A/RING_B in layout.ts), so a 30d/90d-only run would not
+// exercise the sparse 7d/14d ends of that curve.
 
 import { readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
@@ -18,8 +22,10 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const DAY = 86400000
-const argDays = process.argv.slice(2).map(Number).filter((d) => d === 30 || d === 90)
-const RANGES = argDays.length ? argDays : [30, 90]
+// Must match RangeDays in src/analytics.ts.
+const VALID_RANGES = [7, 14, 30, 90]
+const argDays = process.argv.slice(2).map(Number).filter((d) => VALID_RANGES.includes(d))
+const RANGES = argDays.length ? argDays : VALID_RANGES
 
 // loadData() fetches `?url` asset URLs; serve the mock corpus from disk.
 globalThis.fetch = async (url) => {
@@ -136,6 +142,83 @@ const layoutMetrics = (members, edges, positions) => {
   }
 }
 
+// Non-gating cluster-spacing diagnostic.
+//
+// Inter-community gaps are the thing layout.ts is actually tuned for, but they
+// cannot be gated: the usable world (948x423 = 401k u^2) is smaller than the
+// ~514k u^2 of avatar discs the 90d population needs, so both pile-ups and the
+// gaps that separate them are forced at the dense end. The ceiling would need
+// re-tuning on every corpus regeneration, which would make it a churn gate
+// rather than a safety one — so this only reports.
+const clusterSpacing = (members, edges, positions) => {
+  const boxes = new Map()
+  for (const m of members) {
+    const p = positions.get(m.id)
+    if (!p) continue
+    let b = boxes.get(m.clusterId)
+    if (!b) boxes.set(m.clusterId, (b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity }))
+    b.x0 = Math.min(b.x0, p.x)
+    b.x1 = Math.max(b.x1, p.x)
+    b.y0 = Math.min(b.y0, p.y)
+    b.y1 = Math.max(b.y1, p.y)
+  }
+  const ids = members.map((m) => m.id)
+  const clusterOf = new Map(ids.map((id, i) => [id, members[i].clusterId]))
+  // Which community pairs actually share an edge, and how strongly.
+  const linked = new Set()
+  for (const e of edges) {
+    const ca = clusterOf.get(e.a)
+    const cb = clusterOf.get(e.b)
+    if (ca === undefined || cb === undefined || ca === cb) continue
+    linked.add(ca < cb ? `${ca}|${cb}` : `${cb}|${ca}`)
+  }
+  const keys = [...boxes.keys()]
+  let maxGap = 0
+  let maxPair = ''
+  let sum = 0
+  let pairs = 0
+  let linkedSum = 0
+  let linkedPairs = 0
+  let openSum = 0
+  let openPairs = 0
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const a = keys[i]
+      const b = keys[j]
+      const A = boxes.get(a)
+      const B = boxes.get(b)
+      // Axis-aligned gap: 0 when the boxes overlap on both axes.
+      const gap = Math.max(
+        0,
+        Math.max(A.x0, B.x0) - Math.min(A.x1, B.x1),
+        Math.max(A.y0, B.y0) - Math.min(A.y1, B.y1),
+      )
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`
+      sum += gap
+      pairs++
+      if (linked.has(key)) {
+        linkedSum += gap
+        linkedPairs++
+      } else {
+        openSum += gap
+        openPairs++
+      }
+      if (gap > maxGap) {
+        maxGap = gap
+        maxPair = `${a}/${b}${linked.has(key) ? '' : ' (no cross-edge)'}`
+      }
+    }
+  }
+  return {
+    maxGap,
+    maxPair,
+    meanGap: pairs ? sum / pairs : 0,
+    linkedMean: linkedPairs ? linkedSum / linkedPairs : null,
+    openMean: openPairs ? openSum / openPairs : null,
+    pairs,
+  }
+}
+
 const ser = (m) => JSON.stringify([...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)))
 
 for (const days of RANGES) {
@@ -204,6 +287,16 @@ for (const days of RANGES) {
   check(`[${days}d] no blob cores (<=8% with 3+ stacked)`, m.deepBlobFrac <= 0.08, `${(m.deepBlobFrac * 100).toFixed(1)}%`)
   console.log(`[${days}d] mean connected-pair ${m.edgeMean.toFixed(1)} vs random-pair ${m.randMean.toFixed(1)}`)
   check(`[${days}d] connected members form neighborhoods`, m.edgeMean < m.randMean)
+
+  // 6. Cluster spacing (reported, not gated — see clusterSpacing).
+  const sp = clusterSpacing(members, edges, pos)
+  const meanDeg = (2 * edges.length) / members.length
+  console.log(
+    `[${days}d] meanDeg ${meanDeg.toFixed(2)}; cluster gaps over ${sp.pairs} pairs: ` +
+      `mean ${sp.meanGap.toFixed(0)}, max ${sp.maxGap.toFixed(0)} at ${sp.maxPair}; ` +
+      `mean gap linked ${sp.linkedMean === null ? 'n/a' : sp.linkedMean.toFixed(0)} ` +
+      `vs no-cross-edge ${sp.openMean === null ? 'n/a' : sp.openMean.toFixed(0)}`,
+  )
 }
 
 if (failures > 0) {

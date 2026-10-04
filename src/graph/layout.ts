@@ -8,8 +8,9 @@ import type { LayoutResult, MemberSpec, Pt } from './types'
 // (build.ts) owns the data. There is no custom force solver here and no
 // continuous simulation: the pipeline runs once per population.
 //
-// Pipeline: deterministic cluster-anchored seeding -> ForceAtlas2 (edge
-// topology reshapes the seeded structure) -> Noverlap (avatar separation)
+// Pipeline: deterministic cluster-anchored seeding (communities chained by
+// cross-cluster connectivity, ring radius scaled to graph density) -> ForceAtlas2
+// (edge topology reshapes the seeded structure) -> Noverlap (avatar separation)
 // -> normalize into the stable world rect. Sigma renders the result.
 //
 // Determinism: no Math.random anywhere. Seeding is a pure function of member
@@ -24,6 +25,39 @@ const PAD = 26
 const FA2_ITERATIONS = 400
 const NOVERLAP_ITERATIONS = 300
 const GOLDEN_ANGLE = 2.399963
+
+// Seed-ring calibration: ringK = RING_A + RING_B * ln(meanDegree).
+//
+// The ring is imposed because ForceAtlas2 cannot derive inter-community spacing
+// from the data itself: cross-cluster edges are only ~0.7% of all edges at 30d
+// (36 of 5397), so every pure-force seeding collapses all five communities into
+// one blob (5-NN purity 10-19% vs 77% here). The ring's ORDER decides which
+// communities sit side by side, and ordering by cluster size is arbitrary, so
+// clusters are chained by their real cross-cluster connectivity instead. That
+// keeps linked communities adjacent and lets weakly linked ones drift outward,
+// which is what makes each gap read as signal rather than as wasted space.
+//
+// RING_A/RING_B set the ring's radius and are scaled by ln(meanDegree) because
+// one fixed radius cannot serve both ends of the density range: a ring wide
+// enough for 7d collides on the denser 90d graph, one tight enough for 90d
+// leaves 7d visibly gappy. Fitted against all four real ranges (mean degree
+// 6.13 / 8.48 / 12.36 / 20.09 for 7/14/30/90d), these hold 5-NN community
+// purity at 78/81/77/73% while cutting the 30d cross-vs-intra edge length ratio
+// from 4.11 to 2.60 — that ratio was the artifact, since it stretched the 36
+// real cross-community links to four times the length of intra-community ones.
+//
+// The radius is a deliberate trade-off against that purity, so recalibrate
+// deliberately rather than greedily: minimising the radius until the
+// stacked <=35% / deep-blob <=8% gates in check-layout.mjs just clear lands on
+// A=1 B=1, which equalises the mean gap near 50 world units but drops purity to
+// 65-76% and blends the communities into one mass. Raise these constants if
+// distinctness matters more than whitespace, and re-run
+// `node scripts/check-layout.mjs 7 14 30 90` after regenerating the corpus.
+const RING_A = 1.3
+const RING_B = 1.2
+// Degenerate populations (e.g. the synthetic bench graph) can have no edges at
+// all; clamping keeps ln() finite so the seed ring never collapses to NaN.
+const MIN_MEAN_DEGREE = 1
 
 // Avatar world radii. Mirrors renderer.ts RADII/sizeForDegree (mirrored rather
 // than imported so layout never imports the renderer); keep the two in sync.
@@ -46,29 +80,73 @@ export function runLayout(
 
   const byId = new Map(members.map((m) => [m.id, m]))
 
-  // 1. Cluster anchors: deterministic, larger clusters first. These only seed
-  // the simulation — nothing constrains nodes to a radius afterwards.
+  // 1. Cluster anchors. The seed ring only seeds the simulation — nothing
+  // constrains nodes to a radius afterwards — but its order decides how far
+  // apart communities end up, so clusters are chained by their real
+  // cross-cluster connectivity rather than by size (see RING_A/RING_B).
   const byCluster = new Map<number, string[]>()
   for (const m of members) {
     const arr = byCluster.get(m.clusterId)
     if (arr) arr.push(m.id)
     else byCluster.set(m.clusterId, [m.id])
   }
-  const clusters = [...byCluster.keys()].sort(
-    (a, b) => (byCluster.get(b)?.length ?? 0) - (byCluster.get(a)?.length ?? 0),
-  )
-  const ordinal = new Map(clusters.map((c, i) => [c, i]))
+  const clusterSize = (c: number): number => byCluster.get(c)?.length ?? 0
+
+  // Cross-cluster weight per community pair, reusing the same log-compressed
+  // score the member edges below use (raw 0-100 scores would let a few strong
+  // ties dominate). Also tracked per cluster to pick the chain's starting point.
+  const pairKey = (a: number, b: number): string => (a < b ? `${a}|${b}` : `${b}|${a}`)
+  const crossWeight = new Map<string, number>()
+  const crossTotal = new Map<number, number>()
+  for (const e of edges) {
+    const ca = byId.get(e.a)?.clusterId
+    const cb = byId.get(e.b)?.clusterId
+    if (ca === undefined || cb === undefined || ca === cb) continue
+    const w = 1 + Math.log1p(Math.max(0, e.score ?? 0))
+    crossWeight.set(pairKey(ca, cb), (crossWeight.get(pairKey(ca, cb)) ?? 0) + w)
+    crossTotal.set(ca, (crossTotal.get(ca) ?? 0) + w)
+    crossTotal.set(cb, (crossTotal.get(cb) ?? 0) + w)
+  }
+  const linkTo = (a: number, b: number): number => crossWeight.get(pairKey(a, b)) ?? 0
+
+  // Unclustered members (-1) stay pinned at the centre instead of taking a ring
+  // slot: they belong to no community, so no ring position would be honest.
+  const unvisited = new Set([...byCluster.keys()].filter((c) => c !== -1))
+  const order: number[] = []
+  if (unvisited.size > 0) {
+    // Greedy nearest-neighbour chain. Every comparison falls back to cluster
+    // size then cluster id, so equal weights never reorder between runs.
+    const sizeDesc = (a: number, b: number): number => clusterSize(b) - clusterSize(a)
+    const idAsc = (a: number, b: number): number => a - b
+    const [first] = [...unvisited].sort(
+      (a, b) =>
+        (crossTotal.get(b) ?? 0) - (crossTotal.get(a) ?? 0) || sizeDesc(a, b) || idAsc(a, b),
+    )
+    order.push(first)
+    unvisited.delete(first)
+    while (unvisited.size > 0) {
+      const current = order[order.length - 1]
+      const [next] = [...unvisited].sort(
+        (a, b) => linkTo(current, b) - linkTo(current, a) || sizeDesc(a, b) || idAsc(a, b),
+      )
+      order.push(next)
+      unvisited.delete(next)
+    }
+  }
+  const rank = new Map(order.map((c, i) => [c, i]))
+
+  // Anchor ellipse sized against FA2's measured equilibrium span, so the uniform
+  // normalize below stays near-identity and the graph lands on the world width
+  // with no letterbox. ringK is the knob that sets inter-community whitespace;
+  // see the calibration block above before changing it.
+  const meanDegree = (2 * edges.length) / members.length
+  const ringK = RING_A + RING_B * Math.log(Math.max(MIN_MEAN_DEGREE, meanDegree))
   const cx = W / 2
   const cy = H / 2
   const ringR = Math.min(W, H) * 0.32
-  const ringK = 5.1
   const anchorOf = (c: number): Pt => {
     if (c === -1) return { x: cx, y: cy }
-    // Wide anchor ellipse sized so ForceAtlas2's equilibrium fills the world
-    // rect (the uniform normalize then stays near-identity). Repulsion expands
-    // the seed; ringK is calibrated against the measured FA2 span so the
-    // output lands at the world width with no letterbox.
-    const a = (ordinal.get(c)! / Math.max(1, clusters.length)) * Math.PI * 2 - Math.PI / 2
+    const a = ((rank.get(c) ?? 0) / Math.max(1, order.length)) * Math.PI * 2 - Math.PI / 2
     return { x: cx + Math.cos(a) * ringR * ringK, y: cy + Math.sin(a) * ringR }
   }
 
@@ -80,7 +158,7 @@ export function runLayout(
   for (const [c, ids] of byCluster) {
     const anchor = anchorOf(c)
     const spread = Math.max(60, Math.sqrt(ids.length) * 22)
-    const phase = (ordinal.get(c) ?? 0) * 0.9
+    const phase = (rank.get(c) ?? 0) * 0.9
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i]
       const a = i * GOLDEN_ANGLE + phase
