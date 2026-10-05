@@ -9,7 +9,6 @@ import { Label } from '../components/Label'
 import { Change } from '../components/Change'
 import { Stat } from '../components/Stat'
 import { Avatar } from '../components/Avatar'
-import { Gauge } from '../components/Gauge'
 import { Menu, MenuItem } from '../components/Menu'
 import { metricInfo } from '../help'
 import { endDate } from '../data'
@@ -20,14 +19,6 @@ import { FILTER_OPTIONS, NetworkGraph, type GraphFilter, type MemberFilter, type
 import type { RangeProps } from './EngagementPage'
 
 const DAY = 86400000
-
-const DIMENSIONS: { label: string; key: 'connectedness' | 'participation' | 'distribution' | 'relationshipQuality'; w: number; def: string }[] = [
-  { label: 'Connectedness', key: 'connectedness', w: 0.35, def: 'Share of members with at least two meaningful connections — at least 2 interactions with the same member across 2 or more days.' },
-  { label: 'Participation', key: 'participation', w: 0.3, def: 'Connected members who had at least one qualifying interaction with an existing connection during the selected period.' },
-  { label: 'Distribution', key: 'distribution', w: 0.2, def: 'How evenly meaningful connections are spread rather than concentrated in a small group — most members having some connections scores higher.' },
-  { label: 'Relationship quality', key: 'relationshipQuality', w: 0.15, def: 'Weighted average relationship strength across meaningful relationships — Strong 100, Mid 60, Weak 20.' }
-]
-const weightsMeta = `Weights · ${DIMENSIONS.map((d) => `${d.label} ${Math.round(d.w * 100)}%`).join(' · ')}`
 
 export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange, active = true }: RangeProps & { active?: boolean }) {
   const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / DAY)) : range
@@ -41,7 +32,6 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   // activity-level window) so People, this card and the member popup agree.
   // The "connections" sublabel reflects the visible graph window via rel.degree.
   const influencers = useMemo(() => influenceEngine().influencers.slice(0, 5), [])
-  const score = Math.round(rel.strength)
   const [filter, setFilter] = useState<GraphFilter>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [memberFilter, setMemberFilter] = useState<MemberFilter>({ cluster: null, minDegree: null })
@@ -187,35 +177,15 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   )
   return <>
     <PageHeader title="Relationships" subtitle="Understand how members connect, influence and bridge your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
-    <Card className="strength-card">
-      <CardTitle title="Community strength" className="metrics-title" action={<span className="card-title-meta">{weightsMeta}</span>} />
-      <div className="strength-body">
-        <div className="strength-gauge">
-          <Gauge value={score}>
-            <span className="gauge-score"><b>{score}</b><span>/100</span></span>
-            <span className="gauge-caption">Community score</span>
-            <Change v={rel.strengthDelta} range={effDays} unit="pts" />
-          </Gauge>
-        </div>
-        <div className="strength-rows">
-          {DIMENSIONS.map((d) => {
-            const v = rel[d.key]
-            return (
-              <div className="strength-row" key={d.label}>
-                <div className="strength-row-info">
-                  <div className="strength-row-title"><Label text={d.label} /><span className="strength-weight">{Math.round(d.w * 100)}% weight</span></div>
-                </div>
-                <div className="strength-bar"><i style={{ width: `${v}%`, background: v >= 80 ? 'var(--score-7)' : 'var(--content-brand)' }} /></div>
-                <div className="strength-row-score"><b>{Math.round(v)}</b><span>/100</span></div>
-              </div>
-            )
-          })}
-        </div>
+    <Card className="metrics">
+      <CardTitle title="Network summary" className="metrics-title" />
+      <div className="metric-row">
+        <div className="metric"><Stat layout="below" label="Connected members" info={metricInfo['Connected members']} value={formatNumber(rel.connectedCount)} change={{ v: connectedPct, range: effDays, caption: 'vs last period' }} /></div>
+        <div className="metric"><Stat layout="below" label="Weak connected members" info={metricInfo['Weak connected members']} value={formatNumber(rel.lessConnectedCount)} change={{ v: lessPct, range: effDays, caption: 'vs last period' }} /></div>
+        <div className="metric"><Stat layout="below" label="Avg. connections per member" info={metricInfo['Avg. connections per member']} value={rel.avgConnections.toFixed(1)} change={{ v: avgPct, range: effDays, caption: 'vs last period' }} /></div>
+        <div className="metric"><Stat layout="below" label="Clusters" info={metricInfo['Clusters']} value={String(rel.clusters.length)} change={{ v: 0, range: effDays, caption: 'vs last period' }} /></div>
       </div>
-      <div className="strength-foot">
-        <div className="strength-foot-title">What drives this score:</div>
-        {DIMENSIONS.map((d) => <div className="strength-foot-row" key={d.label}><b>{d.label}:</b><span>{d.def}</span></div>)}
-      </div>
+      <div className="metrics-insight"><Insight>{insight}</Insight></div>
     </Card>
     <Card className={fullscreen ? 'graph-card fullscreen' : 'graph-card'}>
       <div className="graph-head">
@@ -275,16 +245,6 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
         {memberFilter.minDegree !== null && <span className="filter-pill">{memberFilter.minDegree}+ connections<button aria-label="Clear connections filter" onClick={() => applyConn(null)}><X size={16} /></button></span>}
       </div>
       <NetworkGraph ref={graphRef} data={rel} filter={filter} search={search} selected={selected} onSelect={handleSelect} memberFilter={memberFilter} />
-    </Card>
-    <Card className="metrics">
-      <CardTitle title="Network summary" className="metrics-title" />
-      <div className="metric-row">
-        <div className="metric"><Stat layout="below" label="Connected members" info={metricInfo['Connected members']} value={formatNumber(rel.connectedCount)} change={{ v: connectedPct, range: effDays, caption: 'vs last period' }} /></div>
-        <div className="metric"><Stat layout="below" label="Weak connected members" info={metricInfo['Weak connected members']} value={formatNumber(rel.lessConnectedCount)} change={{ v: lessPct, range: effDays, caption: 'vs last period' }} /></div>
-        <div className="metric"><Stat layout="below" label="Avg. connections per member" info={metricInfo['Avg. connections per member']} value={rel.avgConnections.toFixed(1)} change={{ v: avgPct, range: effDays, caption: 'vs last period' }} /></div>
-        <div className="metric"><Stat layout="below" label="Clusters" info={metricInfo['Clusters']} value={String(rel.clusters.length)} change={{ v: 0, range: effDays, caption: 'vs last period' }} /></div>
-      </div>
-      <div className="metrics-insight"><Insight>{insight}</Insight></div>
     </Card>
     <div className="bottom-grid rel-bottom-grid">
       <Card>

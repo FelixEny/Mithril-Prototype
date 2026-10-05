@@ -88,7 +88,10 @@ export default function App() {
   const app: ReactNode = !ready
     ? <div className="app"><Sidebar active={page} onNavigate={navigate} /><main aria-busy="true"><PageHeader title={page} subtitle={subtitles[page]} /><DashboardSkeleton /></main></div>
     : <div className="app"><Sidebar active={page} onNavigate={navigate} /><main>
-        <section className="page-panel" hidden={hidden('Overview')}><OverviewPage {...rangeProps} /></section>
+        {/* Gated on `warm` for the same reason as Relationships: the Overview reads
+            the network engine for its strength card, which is the heaviest call in
+            the app and must not run inside the first paint of another page. */}
+        {(warm || page === 'Overview') && <section className="page-panel" hidden={hidden('Overview')}><OverviewPage {...rangeProps} onNavigate={navigate} /></section>}
         <section className="page-panel" hidden={hidden('Engagement')}><EngagementPage {...rangeProps} /></section>
         {(warm || page === 'Relationships') && <section className="page-panel" hidden={hidden('Relationships')}><RelationshipsPage {...rangeProps} active={page === 'Relationships'} /></section>}
         {(warm || page === 'People') && <section className="page-panel" hidden={hidden('People')}><PeoplePage {...rangeProps} /></section>}

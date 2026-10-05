@@ -63,12 +63,15 @@ const EDGE_W_DEFAULT = 1.25
 const RING_W = 2
 
 // Per-node halo tuning (Marvel: size 5x, intensity ~0.05*log at rest,
-// 0.65-0.75 on focus). Ours reads slightly stronger so the cluster wash is
-// visible over the dotted background at overview.
+// 0.65-0.75 on focus). Peak intensity is scaled down from the original
+// 0.3 / 0.45 / 0.6 so the wash reads soft rather than bright. One factor trims
+// rest, neighbour and focus together, which keeps their ratio intact and leaves
+// every halo size untouched.
 const HALO_SCALE = 5
-const HALO_ALPHA = 0.3
-const HALO_ALPHA_NB = 0.45
-const HALO_ALPHA_FOCUS = 0.6
+const HALO_ALPHA_SCALE = 0.65
+const HALO_ALPHA = 0.3 * HALO_ALPHA_SCALE
+const HALO_ALPHA_NB = 0.45 * HALO_ALPHA_SCALE
+const HALO_ALPHA_FOCUS = 0.6 * HALO_ALPHA_SCALE
 const HALO_FOCUS_SCALE = 3.5
 const HALO_NB_SCALE = 2
 
@@ -413,7 +416,9 @@ export class GraphEngine {
         avatarColor: av.avatarColor,
         clusterColor,
         // Halo wash: cluster tint lightened toward white (Marvel lightens ~75).
-        haloColor: hexMix(clusterColor, '#FFFFFF', 0.72),
+        // Heavier mix keeps the cluster hue readable at the lower peak
+        // intensity, so the wash reads soft without going colourless.
+        haloColor: hexMix(clusterColor, '#FFFFFF', 0.82),
       })
     }
     pop.edges.forEach((e, rank) => {
@@ -428,12 +433,22 @@ export class GraphEngine {
     // reference a node that no longer exists); sigma nulls its hovered node
     // without emitting leaveNode, so reset the cursor here too.
     this.hoveredId = null
+    // Same for the selection, and it has to happen here rather than relying on
+    // the onSelect(null) below: that callback only clears React state, while the
+    // reducers read selectedId synchronously during the refresh below.
+    if (this.selectedId !== null && !graph.hasNode(this.selectedId)) this.selectedId = null
     this.memberCursor(false)
+    // Install the graph BEFORE re-registering the reducers. setSettings schedules
+    // a refresh, and that refresh runs against whichever graph sigma currently
+    // holds -- so doing this the other way round leaves the reducers resolving
+    // ids against the new population while sigma still iterates the old one,
+    // which throws NotFoundGraphError for every node the filter removed and
+    // kills the rebuild before sigma.setGraph below is ever reached.
+    this.sigma.setGraph(graph)
     this.sigma.setSettings({
       nodeReducer: this.nodeReducer.bind(this),
       edgeReducer: this.edgeReducer.bind(this),
     } as any)
-    this.sigma.setGraph(graph)
     // First paint must already sample the real atlas: the GL programs were
     // constructed against the (empty) construction-time atlas, and the photo
     // callback above only fires when at least one photo decodes.
@@ -634,9 +649,15 @@ export class GraphEngine {
     if (nb) return nb
     nb = new Set<string>()
     const graph = this.graph
-    // Direct relationships are symmetric: count an edge in either direction
-    // (the graph is mixed/directed, so forEachOutboundEdge would miss half).
-    for (const neighbor of graph.neighbors(id)) nb.add(neighbor)
+    // The focus node can be filtered out of the population while it is still
+    // the selected member (setPopulation clears selectedId, but a stale id can
+    // still arrive from a queued engine call). Treat that as "no neighbours"
+    // instead of letting graph.neighbors throw out of a reducer.
+    if (graph.hasNode(id)) {
+      // Direct relationships are symmetric: count an edge in either direction
+      // (the graph is mixed/directed, so forEachOutboundEdge would miss half).
+      for (const neighbor of graph.neighbors(id)) nb.add(neighbor)
+    }
     this.nbsCache.set(id, nb)
     return nb
   }
@@ -667,7 +688,11 @@ export class GraphEngine {
   }
 
   private nodeReducer(node: string, data: DisplayNode): Partial<DisplayNode> {
-    const attrs = this.graph.getNodeAttributes(node)
+    // Read the attributes off the node sigma is drawing rather than re-reading
+    // them from this.graph: the two can briefly disagree during a population
+    // swap, and sigma's copy is the one actually on screen. The cast is exact --
+    // these are the attributes setPopulation hands to addNode.
+    const attrs = data as NodeAttrs
     const focusId = this.focus()
     const q = this.searchQuery.trim().toLowerCase()
     const hit = !!q && (attrs.name.toLowerCase().includes(q) || (attrs.username ?? '').toLowerCase().includes(q))
@@ -802,21 +827,24 @@ export class GraphEngine {
   }
 
   private edgeReducer(edge: string, data: DisplayEdge): Partial<DisplayEdge> {
-    const attrs = this.graph.getEdgeAttributes(edge)
+    // As in nodeReducer: trust the attributes sigma is drawing.
+    const attrs = data as EdgeAttrs
     const focusId = this.focus()
     const q = this.searchQuery.trim().toLowerCase()
     // Sigma's edge reducer only receives (edge, data); endpoint ids come
     // from the graph directly, but only when focus or search needs them —
     // extremities lookups over every edge on every rest refresh add up.
+    // Guarded because a population swap can retire an edge mid-refresh.
+    const alive = this.graph.hasEdge(edge)
     let sId = ''
     let tId = ''
-    if (focusId || q) {
+    if ((focusId || q) && alive) {
       ;[sId, tId] = this.graph.extremities(edge)
     }
 
     let sourceHit = false
     let targetHit = false
-    if (q) {
+    if (q && alive && this.graph.hasNode(sId) && this.graph.hasNode(tId)) {
       const sa = this.graph.getNodeAttributes(sId)
       const ta = this.graph.getNodeAttributes(tId)
       sourceHit = (sa.name ?? '').toLowerCase().includes(q) || (sa.username ?? '').toLowerCase().includes(q)

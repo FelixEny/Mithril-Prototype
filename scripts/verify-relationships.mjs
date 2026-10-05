@@ -3,9 +3,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // Relationship-story verification for the mock data corpus. Ports the edge
-// scoring + clustering logic from src/relationships.ts (keep STRONG_AT /
-// MID_AT / FREQ_K in sync) and prints the metrics the Relationships page
-// derives from a window. Run: node scripts/verify-relationships.mjs [days...]
+// scoring, the four composite strength components and the clustering logic from
+// src/relationships.ts (keep STRONG_AT / MID_AT / FREQ_K / PARTICIPATION_PORTION
+// in sync) and prints the metrics the Relationships page derives from a window.
+// Run: node scripts/verify-relationships.mjs [days...]
+//
+// `strength` here is the Community Strength composite. It is only meaningful on
+// the calibrated basis window -- on a short window the >=2-interaction edge
+// threshold starves the components and the score collapses for reasons that have
+// nothing to do with the community. See STRENGTH_BASIS_DAYS in src/relationships.ts.
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const dataDir = join(root, 'src', 'data')
@@ -14,6 +20,12 @@ const read = (name) => JSON.parse(readFileSync(join(dataDir, `${name}.json`), 'u
 const STRONG_AT = 70
 const MID_AT = 40
 const FREQ_K = 4
+const PARTICIPATION_PORTION = 0.25
+const W_CONN = 0.35
+const W_PART = 0.3
+const W_DIST = 0.2
+const W_QUAL = 0.15
+const qualityWeight = (label) => (label === 'strong' ? 100 : label === 'mid' ? 60 : 20)
 
 const DAY = 86400000
 const messages = read('messages')
@@ -58,7 +70,7 @@ function compute(start, winEnd) {
     const recency = 100 * Math.min(1, (acc.lastAt - start) / (winEnd - start))
     const consistency = 100 * (0.65 * Math.min(1, acc.weeks.size / weeksIn) + 0.35 * Math.min(1, acc.days.size / 2.5))
     const score = 0.4 * freq + 0.3 * recency + 0.3 * consistency
-    edges.push({ a: acc.a, b: acc.b, count: acc.count, days: acc.days.size, label: score >= STRONG_AT ? 'strong' : score >= MID_AT ? 'mid' : 'weak' })
+    edges.push({ a: acc.a, b: acc.b, count: acc.count, days: acc.days.size, lastAt: acc.lastAt, label: score >= STRONG_AT ? 'strong' : score >= MID_AT ? 'mid' : 'weak' })
   }
 
   const degreeMap = new Map()
@@ -145,6 +157,20 @@ function compute(start, winEnd) {
   const sorted = [...degreeMap.values()].sort((a, b) => a - b)
   const pctOf = (x) => (total ? ((x / total) * 100).toFixed(0) : '0')
 
+  // Community Strength composite (port of buildCore's tail).
+  const connectedness = (connectedCount / humans.length) * 100
+  const partStart = winEnd - (winEnd - start) * PARTICIPATION_PORTION
+  const connectedSet = new Set([...degreeMap].filter(([, d]) => d >= 2).map(([id]) => id))
+  const maintained = new Set()
+  for (const e of edges) if (e.lastAt >= partStart) { maintained.add(e.a); maintained.add(e.b) }
+  let maintainedConnected = 0
+  for (const id of connectedSet) if (maintained.has(id)) maintainedConnected++
+  const participation = connectedCount > 0 ? (maintainedConnected / connectedCount) * 100 : 0
+  const distribution = Math.max(0, 100 * (1 - gini))
+  const qSum = edges.reduce((s, e) => s + qualityWeight(e.label), 0)
+  const relationshipQuality = total > 0 ? qSum / total : 0
+  const strength = W_CONN * connectedness + W_PART * participation + W_DIST * distribution + W_QUAL * relationshipQuality
+
   const days = Math.round((winEnd - start) / DAY)
   console.log(`\n=== ${days}d window (${new Date(start).toISOString().slice(0, 10)} .. ${new Date(winEnd).toISOString().slice(0, 10)})`)
   console.log(`totalLinks=${total}  nodesWithDegree=${degreeMap.size}  connected(>=2)=${connectedCount}/${humans.length} (${((connectedCount / humans.length) * 100).toFixed(1)}%)`)
@@ -153,6 +179,7 @@ function compute(start, winEnd) {
   console.log(`degree: max=${sorted[sorted.length - 1] || 0}  p90=${sorted[Math.floor(sorted.length * 0.9)] || 0}  p75=${sorted[Math.floor(sorted.length * 0.75)] || 0}  p50=${sorted[Math.floor(sorted.length * 0.5)] || 0}  zeroDeg=${degAll.filter((d) => d === 0).length}`)
   console.log(`clusters(>=10): [${clusters.join(', ')}] count=${clusters.length}  >=50: ${clusters.filter((c) => c >= 50).length}`)
   console.log(`bridges=${bridgeCount}  gini=${gini.toFixed(3)}`)
+  console.log(`strength=${strength.toFixed(2)}/100  [conn ${connectedness.toFixed(1)} x${W_CONN} | part ${participation.toFixed(1)} x${W_PART} | dist ${distribution.toFixed(1)} x${W_DIST} | qual ${relationshipQuality.toFixed(1)} x${W_QUAL}]`)
 }
 
 const daysArg = process.argv.slice(2).map(Number).filter((x) => x > 0)

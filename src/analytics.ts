@@ -150,7 +150,12 @@ export interface DashboardWindow {
   roster: { atEnd: number; inWindow: number }
   joined: number
   left: number
-  delta: { active: number; activeRate: number; activation: number; retention: number; messages: number; replyRate: number; reactionRate: number; voice: number; voiceMinutes: number }
+  // Membership movement got period-over-period deltas too. The Overview headlines
+  // four membership stats side by side, and a change chip that only exists on the
+  // activity metrics would read as "we only track growth on engagement". These
+  // are percentages against the equally-long prior window, matching `active` and
+  // `messages`; the rate metrics above stay in percentage points.
+  delta: { active: number; activeRate: number; activation: number; retention: number; messages: number; replyRate: number; reactionRate: number; voice: number; voiceMinutes: number; totalMembers: number; joined: number; left: number }
   activation: { activated: number; eligible: number }
   retention: { returned: number; prior: number }
   series: { label: string; date: string; messages: number; active: number; voice: number }[]
@@ -161,7 +166,11 @@ export interface DashboardWindow {
   peaks: { weekday: number; minHour: number; maxHour: number; peak: { weekday: number; hour: number; count: number }; avg: number; sum: number; magnitude: number }[]
   baseline: number
   channelRows: { id: string; name: string; messages: number; active: number }[]
-  discussionRows: { id: string; channelId: string; text: string; channel: string; replies: number; reactions: number; participants: number; avatars: { id: string; name: string }[]; score: number }[]
+  // `lastAt` is the most recent message in the row's 3-hour activity slice. The
+  // Mithril feed needs a real event time for its "3h ago" column; the other three
+  // feed rows are window aggregates and have none, which is why this field exists
+  // only here rather than on the window as a whole.
+  discussionRows: { id: string; channelId: string; text: string; channel: string; replies: number; reactions: number; participants: number; avatars: { id: string; name: string }[]; score: number; lastAt: Date | null }[]
 }
 const dashboardCache = new Map<string, DashboardWindow>()
 export function dashboardWindow(start: Date, end: Date): DashboardWindow {
@@ -179,6 +188,13 @@ export function dashboardWindow(start: Date, end: Date): DashboardWindow {
   const joined = humans.filter(m => m.joinedAt > start && m.joinedAt <= end).length
   const left = humans.filter(m => m.leftAt !== null && m.leftAt > start && m.leftAt <= end).length
   const totalMembers = rosterAtEnd
+  // Prior-window membership movement. `rosterAtStart` is the roster the current
+  // window opened on, which is the only fair denominator for the roster's growth:
+  // comparing against today's roster would divide a departure by a number that
+  // already excludes the person who left.
+  const rosterAtStart = humans.filter(m => presentAt(m, start)).length
+  const joinedPrior = humans.filter(m => m.joinedAt > previousStart && m.joinedAt <= start).length
+  const leftPrior = humans.filter(m => m.leftAt !== null && m.leftAt > previousStart && m.leftAt <= start).length
   // Activation: only members who still existed at the end of their own 7-day
   // window can have activated. Someone who left on day 2 never got the chance,
   // and counting them as a failed activation would blame them for leaving.
@@ -223,10 +239,54 @@ export function dashboardWindow(start: Date, end: Date): DashboardWindow {
   }))
   const peak = heat.flat().reduce((a,b) => a.count > b.count ? a : b); const baseline = periodMessages.length / Math.max(1, lengthDays * 24); const peakBlocks: { weekday: number; minHour: number; maxHour: number; cells: { weekday: number; hour: number; count: number }[] }[] = []; for (const cell of heat.flat().filter(x => x.count > 0).sort((a,b) => b.count - a.count).slice(0, 6)) { let placed = false; for (const b of peakBlocks) { if (b.weekday !== cell.weekday) continue; if (cell.hour === b.maxHour + 1) { b.maxHour = cell.hour; b.cells.push(cell); placed = true; break } if (cell.hour === b.minHour - 1) { b.minHour = cell.hour; b.cells.push(cell); placed = true; break } } if (!placed && peakBlocks.length < 3) peakBlocks.push({ weekday: cell.weekday, minHour: cell.hour, maxHour: cell.hour, cells: [cell] }) } const peaks = peakBlocks.map(b => { const top = b.cells.reduce((a,c) => a.count > c.count ? a : c), sum = b.cells.reduce((n,c) => n + c.count, 0); return { weekday: b.weekday, minHour: b.minHour, maxHour: b.maxHour, peak: top, avg: sum / b.cells.length, sum, magnitude: top.count / Math.max(1, baseline) } }).sort((a,b) => b.peak.count - a.peak.count || b.sum - a.sum)
   const channelRows = channels.map(c => ({ ...c, messages: periodMessages.filter(x => x.channelId === c.id).length, active: unique(periodMessages.filter(x => x.channelId === c.id).map(x => x.memberId)).size })).sort((a,b)=>b.messages-a.messages)
-  const discussionRows = conversations.map(c => { const items = periodMessages.filter(x => x.conversationId === c.id), recent = items.filter(x => x.at >= new Date(end.getTime()-3*3600000)), priorItems = items.filter(x => x.at >= new Date(end.getTime()-27*3600000) && x.at < new Date(end.getTime()-3*3600000)), velocity = recent.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(recent.map(x=>x.memberId)).size, baseline = (priorItems.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(priorItems.map(x=>x.memberId)).size)/8, avatars = [...recent].sort((a,b)=>b.at.getTime()-a.at.getTime()).reduce((map,x)=>map.has(x.memberId)?map:map.set(x.memberId,(members.find(m=>m.id===x.memberId)?.name ?? x.memberId)),new Map<string,string>()); return { ...c, channel: channels.find(x=>x.id===c.channelId)!.name, replies: recent.filter(x=>x.hasReply).length, reactions: recent.reduce((n,x)=>n+x.reactions,0), participants: unique(recent.map(x=>x.memberId)).size, avatars: [...avatars].slice(0,3).map(([id,name])=>({id,name})), score: velocity / (baseline || 1) } }).sort((a,b)=>b.score-a.score)
+  const discussionRows = conversations.map(c => { const items = periodMessages.filter(x => x.conversationId === c.id), recent = items.filter(x => x.at >= new Date(end.getTime()-3*3600000)), priorItems = items.filter(x => x.at >= new Date(end.getTime()-27*3600000) && x.at < new Date(end.getTime()-3*3600000)), velocity = recent.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(recent.map(x=>x.memberId)).size, baseline = (priorItems.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(priorItems.map(x=>x.memberId)).size)/8, avatars = [...recent].sort((a,b)=>b.at.getTime()-a.at.getTime()).reduce((map,x)=>map.has(x.memberId)?map:map.set(x.memberId,(members.find(m=>m.id===x.memberId)?.name ?? x.memberId)),new Map<string,string>()); return { ...c, channel: channels.find(x=>x.id===c.channelId)!.name, replies: recent.filter(x=>x.hasReply).length, reactions: recent.reduce((n,x)=>n+x.reactions,0), participants: unique(recent.map(x=>x.memberId)).size, avatars: [...avatars].slice(0,3).map(([id,name])=>({id,name})), score: velocity / (baseline || 1), lastAt: recent.length ? new Date(Math.max(...recent.map(x => x.at.getTime()))) : null } }).sort((a,b)=>b.score-a.score)
   const priorMessages = messages.filter(x => x.at >= previousStart && x.at < start), priorVoice = voiceSessions.filter(x => x.at >= previousStart && x.at < start), priorReplyRate = priorMessages.filter(x => x.hasReply).length / Math.max(1, priorMessages.length) * 100, priorReactionRate = priorMessages.filter(x => x.reactions > 0).length / Math.max(1, priorMessages.length) * 100, priorVoiceIds = unique(priorVoice.map(x => x.memberId)).size, priorVoiceMinutes = priorVoice.reduce((n, x) => n + x.minutes, 0)
-  const delta = { active: prior.size ? (active.size - prior.size) / prior.size * 100 : 0, activeRate: activeRate - priorRate, activation: activationRate - priorActivation, retention: retentionRate - priorRetention, messages: priorMessages.length ? (periodMessages.length - priorMessages.length) / priorMessages.length * 100 : 0, replyRate: current.replyRate - priorReplyRate, reactionRate: current.reactionRate - priorReactionRate, voice: priorVoiceIds ? (voiceIds.size - priorVoiceIds) / priorVoiceIds * 100 : 0, voiceMinutes: priorVoiceMinutes ? (current.voiceMinutes - priorVoiceMinutes) / priorVoiceMinutes * 100 : 0 }
+  const delta = { active: prior.size ? (active.size - prior.size) / prior.size * 100 : 0, activeRate: activeRate - priorRate, activation: activationRate - priorActivation, retention: retentionRate - priorRetention, messages: priorMessages.length ? (periodMessages.length - priorMessages.length) / priorMessages.length * 100 : 0, replyRate: current.replyRate - priorReplyRate, reactionRate: current.reactionRate - priorReactionRate, voice: priorVoiceIds ? (voiceIds.size - priorVoiceIds) / priorVoiceIds * 100 : 0, voiceMinutes: priorVoiceMinutes ? (current.voiceMinutes - priorVoiceMinutes) / priorVoiceMinutes * 100 : 0, totalMembers: rosterAtStart ? (rosterAtEnd - rosterAtStart) / rosterAtStart * 100 : 0, joined: joinedPrior ? (joined - joinedPrior) / joinedPrior * 100 : 0, left: leftPrior ? (left - leftPrior) / leftPrior * 100 : 0 }
   const result = { start, end, current, totalMembers, roster: { atEnd: rosterAtEnd, inWindow: rosterInWindow }, joined, left, delta, activation: { activated, eligible: eligible.length }, retention: { returned, prior: priorOnRoster.size }, series, tiers, heat, heatActive, peak, peaks, baseline, channelRows, discussionRows }
   dashboardCache.set(cacheKey, result)
   return result
+}
+
+// ---------------------------------------------------------------------------
+// Daily membership series
+// ---------------------------------------------------------------------------
+// `DashboardWindow.series` is capped at 30 points because the "Activity over time"
+// chart only has room for that many ticks. The Overview's four stat cards each
+// carry a sparkline across the *whole* selected range, so a 90-day window needs 90
+// bars -- and three of the four series it plots (roster, joined, left) are not in
+// `series` at all. Bucketing separately keeps the line chart's tick budget intact
+// instead of widening a series that already has a documented cap.
+//
+// Buckets use the same half-open `(from, to]` convention as `membershipFlow`, and
+// each bucket's roster is measured at its closing boundary with `presentAt`, so
+// the final point equals `DashboardWindow.totalMembers` exactly: the sparkline
+// ends on the same number the stat card above it shows.
+
+export interface MembershipPoint { label: string; date: string; roster: number; active: number; joined: number; left: number }
+const membershipSeriesCache = new Map<string, MembershipPoint[]>()
+export function membershipSeries(start: Date, end: Date): MembershipPoint[] {
+  const cacheKey = `${start.getTime()}|${end.getTime()}`
+  const hit = membershipSeriesCache.get(cacheKey)
+  if (hit) return hit
+  const humans = members.filter(m => !m.bot)
+  const buckets = Math.max(1, Math.round((end.getTime() - start.getTime()) / day))
+  const out: MembershipPoint[] = []
+  for (let i = 0; i < buckets; i++) {
+    const s = new Date(start.getTime() + i * day)
+    // The last bucket closes on `end` rather than on the next midnight, so a
+    // partial trailing day is still counted and the closing roster reconciles
+    // with the "Total members" stat.
+    const close = i === buckets - 1 ? end : new Date(s.getTime() + day)
+    const sMs = s.getTime(), cMs = close.getTime()
+    out.push({
+      label: `${s.getUTCMonth() + 1}/${s.getUTCDate()}`,
+      date: `${monthNames[s.getUTCMonth()]} ${s.getUTCDate()}, ${s.getUTCFullYear()}`,
+      roster: humans.filter(m => presentAt(m, close)).length,
+      active: activeIds(s, close).size,
+      joined: humans.filter(m => m.joinedAt.getTime() > sMs && m.joinedAt.getTime() <= cMs).length,
+      left: humans.filter(m => m.leftAt !== null && m.leftAt.getTime() > sMs && m.leftAt.getTime() <= cMs).length,
+    })
+  }
+  membershipSeriesCache.set(cacheKey, out)
+  return out
 }

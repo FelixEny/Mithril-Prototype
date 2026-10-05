@@ -1,8 +1,10 @@
-import { dashboardWindow, formatNumber, type RangeDays } from './analytics'
+import { formatNumber, membershipSeries, type DashboardWindow, type MembershipPoint } from './analytics'
 import { allSegments, segmentFlow, segmentMembership } from './segments'
 import { endDate, type Segment } from './data'
 
 const DAY = 86400000
+
+export const windowDays = (start: Date, end: Date) => Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY))
 
 // ---------------------------------------------------------------------------
 // Overview findings
@@ -73,9 +75,11 @@ function isRollingCohort(seg: Segment): boolean {
   return seg.criteria?.joinedWithinDays !== undefined
 }
 
-export function overviewFindings(asOf: Date = endDate, windowDays = FINDING_WINDOW_DAYS): OverviewFinding[] {
+// `days` rather than `windowDays`: the parameter would otherwise shadow the
+// module's own `windowDays` helper.
+export function overviewFindings(asOf: Date = endDate, days = FINDING_WINDOW_DAYS): OverviewFinding[] {
   const to = asOf.getTime()
-  const from = new Date(to - windowDays * DAY)
+  const from = new Date(to - days * DAY)
   const out: OverviewFinding[] = []
   for (const seg of allSegments()) {
     if (isRollingCohort(seg)) continue
@@ -104,78 +108,95 @@ export function overviewFindings(asOf: Date = endDate, windowDays = FINDING_WIND
 }
 
 // ---------------------------------------------------------------------------
-// Overview snapshot
+// Lead story
 // ---------------------------------------------------------------------------
+// One sentence a CM reads before anything else on the page. It is a single 40px
+// paragraph whose load-bearing figures are set in `--content-primary` and whose
+// connective grammar stays in `--content-secondary`, so the eye lands on the
+// numbers rather than the sentence holding them up. That is why this returns runs
+// instead of a string: a headline plus a detail line would put the emphasis in a
+// different place from the thing it emphasises.
+//
+// Membership direction leads because it is the only thing on this screen that
+// changes hands -- the headline cannot fix itself, and it is the signal most
+// likely to be missed on a 2,500-member server.
+
+export interface StoryRun { text: string; strong?: boolean }
 
 export interface OverviewStory {
-  headline: string
-  detail: string
+  runs: StoryRun[]
   tone: 'up' | 'down' | 'flat'
 }
 
-export interface OverviewSnapshot {
-  window: { start: Date; end: Date; days: number }
-  // Point-in-time, "as of <end>".
-  total: number
-  // Period movement, over the selected window.
-  newMembers: number
-  leftMembers: number
-  net: number
-  participationRate: number
-  activeMembers: number
-  findings: OverviewFinding[]
-  story: OverviewStory
-}
+const strong = (text: string): StoryRun => ({ text, strong: true })
+const plain = (text: string): StoryRun => ({ text })
 
-export function overviewSnapshot(days: RangeDays = 30): OverviewSnapshot {
-  const end = new Date(endDate.getTime())
-  return overviewWindow(new Date(end.getTime() - days * DAY), end)
-}
+// Half a point of retention is noise, not a contradiction worth a clause.
+const RETENTION_FLOOR = 0.5
 
-// `total` is point-in-time and everything else is period movement, so the two
-// are kept as separate fields rather than one "members" number. A CM reading
-// "2,507" needs to know it is the roster right now, not the roster a month ago.
-export function overviewWindow(start: Date, end: Date): OverviewSnapshot {
-  const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY))
-  const w = dashboardWindow(start, end)
+// The second clause appears only when retention moves *against* membership. When
+// the two agree, restating it is noise; when they disagree, that contradiction is
+// the most useful sentence on the screen, and it is the shape Figma's copy takes
+// ("grew by 157 members ... but member retention declined by 6pp").
+export function overviewStory(w: DashboardWindow): OverviewStory {
+  const days = windowDays(w.start, w.end)
   const net = w.joined - w.left
-  return {
-    window: { start, end, days },
-    total: w.roster.atEnd,
-    newMembers: w.joined,
-    leftMembers: w.left,
-    net,
-    participationRate: w.current.activeRate,
-    activeMembers: w.current.active,
-    findings: overviewFindings(end),
-    story: leadStory(w.roster.atEnd, net, days, w.joined, w.left),
+  const runs: StoryRun[] = [plain('Your community ')]
+  if (net > 0) runs.push(strong(`grew by ${formatNumber(net)} ${net === 1 ? 'member' : 'members'}`))
+  else if (net < 0) runs.push(strong(`shrank by ${formatNumber(-net)} ${Math.abs(net) === 1 ? 'member' : 'members'}`))
+  else runs.push(strong(`held steady at ${formatNumber(w.totalMembers)} members`))
+  runs.push(plain(` in the last ${days} days`))
+  const retention = w.delta.retention
+  if (net >= 0 ? retention < -RETENTION_FLOOR : retention > RETENTION_FLOOR) {
+    runs.push(plain(', but member '))
+    runs.push(strong(retention < 0 ? `retention declined by ${Math.abs(retention).toFixed(1)}pp` : `retention rose by ${retention.toFixed(1)}pp`))
   }
+  runs.push(plain('.'))
+  return { runs, tone: net > 0 ? 'up' : net < 0 ? 'down' : 'flat' }
 }
 
-// The lead story is one sentence a CM reads before anything else. It leads with
-// direction of membership movement, because that is the only thing on this screen
-// that changes hands -- the headline cannot fix itself and it is the signal most
-// likely to be missed in a 2500-member server.
-function leadStory(total: number, net: number, days: number, joined: number, left: number): OverviewStory {
-  const roster = `${formatNumber(total)} members`
-  if (net > 0) {
-    return {
-      tone: 'up',
-      headline: `${roster} and growing`,
-      detail: `${formatNumber(net)} more ${net === 1 ? 'member' : 'members'} than ${days} days ago, after ${formatNumber(joined)} joined and ${formatNumber(left)} left.`,
-    }
+// ---------------------------------------------------------------------------
+// Stat card sparklines
+// ---------------------------------------------------------------------------
+// One bar series per stat card, so a card carries both "where it is" and "which
+// way it has been moving" without a CM having to open a chart. Bars rather than a
+// line: at card width there is no room for a stroke that stays legible, and
+// joined/left are counts per day, which is what bars say honestly.
+
+export const SPARK_BUCKETS = 28
+
+export interface OverviewSparkBars {
+  total: number[]
+  active: number[]
+  newMembers: number[]
+  leftMembers: number[]
+}
+
+// A 90-day window would need 90 bars; at 4px wide plus a 3px gap that is 630px
+// inside a 266px card. Buckets are averaged for the two level series and summed
+// for the two event series, because averaging joins would invent fractional
+// members per day and summing a roster would report ninety times the community.
+function resample(points: MembershipPoint[], key: 'roster' | 'active' | 'joined' | 'left'): number[] {
+  if (points.length <= SPARK_BUCKETS) return points.map((p) => p[key])
+  const flow = key === 'joined' || key === 'left'
+  const out: number[] = []
+  for (let i = 0; i < SPARK_BUCKETS; i++) {
+    const lo = Math.floor((i * points.length) / SPARK_BUCKETS)
+    const hi = Math.max(lo + 1, Math.floor(((i + 1) * points.length) / SPARK_BUCKETS))
+    const slice = points.slice(lo, hi)
+    const sum = slice.reduce((n, p) => n + p[key], 0)
+    out.push(flow ? sum : sum / slice.length)
   }
-  if (net < 0) {
-    return {
-      tone: 'down',
-      headline: `${roster}, but shrinking`,
-      detail: `${formatNumber(Math.abs(net))} fewer ${Math.abs(net) === 1 ? 'member' : 'members'} than ${days} days ago, after ${formatNumber(joined)} joined and ${formatNumber(left)} left.`,
-    }
-  }
+  return out
+}
+
+export function overviewSparkBars(w: DashboardWindow): OverviewSparkBars {
+  const points = membershipSeries(w.start, w.end)
   return {
-    tone: 'flat',
-    headline: `${roster}, holding steady`,
-    detail: `${formatNumber(joined)} joined and ${formatNumber(left)} left over the last ${days} days.`,
+    total: resample(points, 'roster'),
+    active: resample(points, 'active'),
+    newMembers: resample(points, 'joined'),
+    leftMembers: resample(points, 'left'),
   }
 }
 
@@ -186,11 +207,17 @@ function leadStory(total: number, net: number, days: number, joined: number, lef
 // single-community tool with no account model, so "Good morning, <Community
 // Manager>" would assert a role the prototype has no way to know; naming the
 // community is both true and what the product is actually about.
+//
+// Resolved from the viewer's local clock (`getHours`), which is the PC's own
+// timezone — deliberately not the corpus timezone, since this is a greeting to
+// the person looking at the screen. The emoji tracks the same four bands so
+// the line reads differently across a full day. Evaluated at render time, so
+// it does not tick over while the page stays open.
 
 export function greeting(now: Date): string {
   const h = now.getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 18) return 'Good afternoon'
-  return 'Good evening'
+  if (h < 12) return 'Good Morning \u{1F305}'
+  if (h < 18) return 'Good Afternoon \u2600\uFE0F'
+  if (h < 22) return 'Good Evening \u{1F306}'
+  return 'Good Night \u{1F319}'
 }
-export function overviewSparkBars(){return {total:[],active:[],newMembers:[],leftMembers:[]}}

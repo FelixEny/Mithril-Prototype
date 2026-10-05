@@ -146,14 +146,21 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
     setLoading(true)
     if (loadingTimer.current !== null) clearTimeout(loadingTimer.current)
     loadingTimer.current = window.setTimeout(() => {
-      engine.setData(data)
-      engine.applyMemberFilter({ cluster: memberFilter.cluster, minDegree: memberFilter.minDegree })
-      lastPop.current = { data, mf: { ...memberFilter } }
-      loadingRaf.current = requestAnimationFrame(() => {
+      // The overlay is dismissed in a finally: a throw from the engine used to
+      // skip setLoading(false) and strand the card on "Building graph…" forever.
+      // lastPop stays inside the try so a failed rebuild is retried on the next
+      // change instead of being recorded as done.
+      try {
+        engine.setData(data)
+        engine.applyMemberFilter({ cluster: memberFilter.cluster, minDegree: memberFilter.minDegree })
+        lastPop.current = { data, mf: { ...memberFilter } }
+      } finally {
         loadingRaf.current = requestAnimationFrame(() => {
-          if (!cancelled.current) setLoading(false)
+          loadingRaf.current = requestAnimationFrame(() => {
+            if (!cancelled.current) setLoading(false)
+          })
         })
-      })
+      }
     }, 0)
     return () => {
       if (loadingTimer.current !== null) clearTimeout(loadingTimer.current)

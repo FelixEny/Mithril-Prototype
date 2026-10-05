@@ -29,73 +29,7 @@ Bots are excluded from member-level relationship calculations.
 
 ---
 
-# 2. Community Health
-
-## Community Strength
-
-**Definition**
-
-Community Strength is a **0–100 score** representing the overall health of the community's social network.
-
-### Calculation
-
-```text
-Community Strength =
-  Connectedness × 0.35
-+ Participation × 0.30
-+ Distribution × 0.20
-+ Relationship Quality × 0.15
-```
-
-### Connectedness — 35%
-
-Measures how much of the community has meaningful relationships.
-
-```text
-Connectedness =
-  Connected Members ÷ Total Members × 100
-```
-
-A member is Connected when they have 2 or more meaningful connections.
-
-### Participation — 30%
-
-Measures whether connected members are actively maintaining their relationships.
-
-```text
-Participation =
-  Connected Members who had at least one qualifying interaction
-  with an existing connection during the selected period
-  ÷ Connected Members × 100
-```
-
-### Distribution — 20%
-
-Measures whether meaningful connections are spread across the community or concentrated among a small group.
-
-A community where most members have some meaningful connections should score higher than one where a small group holds most of the connections.
-
-The calculation is internal. **Connection Distribution** is the visible representation of this underlying pattern.
-
-### Relationship Quality — 15%
-
-Measures the overall strength of meaningful relationships across the community.
-
-For the Community Strength calculation:
-
-- Strong = 100
-- Mid = 60
-- Weak = 20
-
-```text
-Relationship Quality =
-  Weighted average relationship strength
-  across meaningful relationships
-```
-
----
-
-# 3. Connected Members
+# 2. Connected Members
 
 **Definition**
 
@@ -112,7 +46,7 @@ The UI can show both the count and percentage of total members.
 
 ---
 
-# 4. Less Connected
+# 3. Less Connected
 
 **Definition**
 
@@ -131,7 +65,7 @@ This is the complement of Connected Members.
 
 ---
 
-# 5. Average Connections per Member
+# 4. Average Connections per Member
 
 **Definition**
 
@@ -150,7 +84,7 @@ All members are included in the denominator, not only Connected Members.
 
 ---
 
-# 6. Connection Distribution
+# 5. Connection Distribution
 
 **Definition**
 
@@ -184,7 +118,7 @@ The displayed buckets are presentation parameters, not different definitions of 
 
 ---
 
-# 7. Clusters Detected
+# 6. Clusters Detected
 
 **Definition**
 
@@ -206,7 +140,7 @@ The page reports the number of detected clusters.
 
 ---
 
-# 8. Bridge Members
+# 7. Bridge Members
 
 **Definition**
 
@@ -226,7 +160,7 @@ Bridge members should be identified directly on the normal relationship graph.
 
 ---
 
-# 9. Individual Influence
+# 8. Individual Influence
 
 ## Reach
 
@@ -253,7 +187,7 @@ Reach =
 
 Influence Score is a **0–100 score** measuring an individual's influence over the **trailing 28 days** — the same window as the Activity level tier.
 
-It answers a different question from Community Strength.
+It answers a different question from Community Strength, which is presented on the Overview page.
 
 - Community Strength asks: **How healthy is the community's social network?**
 - Influence Score asks: **How influential is this individual within that network?**
@@ -348,7 +282,7 @@ The widget can display the top 5–10 members.
 
 ---
 
-# 10. Relationship Strength
+# 9. Relationship Strength
 
 **Definition**
 
@@ -409,7 +343,7 @@ Interactions spread across multiple weeks should score higher than the same numb
 
 ---
 
-# 11. Most Connected
+# 10. Most Connected
 
 **Definition**
 
@@ -426,7 +360,7 @@ A percentile-based threshold is preferred over a fixed connection count so the f
 
 ---
 
-# 12. Important Distinctions
+# 11. Important Distinctions
 
 These concepts should remain separate:
 
@@ -440,7 +374,7 @@ These concepts should remain separate:
 
 ---
 
-# 13. Selected Period Rules
+# 12. Selected Period Rules
 
 Unless otherwise stated, Relationships metrics use the date range selected by the user.
 
@@ -450,7 +384,7 @@ Bots are excluded from member-level relationship calculations.
 
 ---
 
-# 14. Implementation Notes
+# 13. Implementation Notes
 
 Metrics should be derived from a shared underlying relationship/event dataset rather than independently generated values.
 
@@ -475,7 +409,7 @@ Calibration should change how raw values are scaled, not what the metrics mean.
 
 ---
 
-# 15. Graph Level of Detail (LOD)
+# 14. Graph Level of Detail (LOD)
 
 The graph keeps the **entire filtered member population rendered at every zoom
 level**. Zoom changes only how much visual detail each member shows; it never

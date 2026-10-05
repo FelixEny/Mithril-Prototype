@@ -94,12 +94,30 @@ export interface RelationshipsData {
 export const strengthLabel = (score: number): StrengthLabel => (score >= STRONG_AT ? 'strong' : score >= MID_AT ? 'mid' : 'weak')
 const qualityWeight = (label: StrengthLabel) => (label === 'strong' ? 100 : label === 'mid' ? 60 : 20)
 
-// Relationship Strength calibration. Curves are tuned so a 30-day window yields
-// a believable mix (roughly 35% strong / 55% mid / 10% weak). Keep the values
-// in sync with scripts/verify-relationships.mjs.
+// Relationship Strength calibration. The curves are tuned for a single basis
+// window -- see STRENGTH_BASIS_DAYS below -- and must not be read on any other.
+// On a 28-day window this corpus yields roughly 40% strong / 56% mid / 4% weak
+// ties and a composite near 47/100. Keep the values in sync with
+// scripts/verify-relationships.mjs.
 const STRONG_AT = 70
 const MID_AT = 40
 const FREQ_K = 4
+
+// The score's calibration window, in days.
+//
+// An edge only exists once a pair clears two interactions across two days, so
+// every component is really a function of how long you watched: on this corpus
+// connectedness runs 10.8 / 15.8 / 25.2 / 36.5 at 7 / 14 / 28 / 90 days.
+// That is a measurement-window artifact, not the community changing, so the
+// score is computed over a fixed length and the date picker's *length* must not
+// reach it. The end still follows the picker, so a custom end date does move the
+// score -- that is a genuine 28-day period and an equal-length comparison, the
+// same thing strengthDelta already does.
+//
+// 28 rather than 30 to match the trailing-28-day activity snapshot the Overview
+// donut reports. weeksIn = round(days/7) = 4 at both lengths, so the consistency
+// term is unchanged by this choice.
+export const STRENGTH_BASIS_DAYS = 28
 
 const DAY = 86_400_000
 const weekOf = (t: number) => new Date(t - ((new Date(t).getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10)
@@ -244,7 +262,10 @@ function buildCore(start: number, end: number): CoreResult {
   for (const id of connectedSet) if (maintained.has(id)) maintainedConnected++
   const participation = connectedCount > 0 ? (maintainedConnected / connectedCount) * 100 : 0
 
-  const degreeAll = humans.map((m) => degree.get(m.id) ?? 0)
+  // gini()'s weighted-sum form is only valid on ascending input, so it has to be
+  // sorted here -- humans are not in degree order, and passing the raw list made
+  // the coefficient collapse to 0, pinning Distribution at a perfect 100.
+  const degreeAll = humans.map((m) => degree.get(m.id) ?? 0).sort((a, b) => a - b)
   const distribution = Math.max(0, 100 * (1 - gini(degreeAll)))
 
   let qSum = 0
@@ -495,6 +516,39 @@ export function influenceEngine(): RelationshipsData {
     influenceEngineData = relationships(end - INFLUENCE_DAYS * DAY, end)
   }
   return influenceEngineData
+}
+
+export interface StrengthSnapshot {
+  strength: number
+  strengthDelta: number
+  connectedness: number
+  participation: number
+  distribution: number
+  relationshipQuality: number
+}
+
+const strengthCache = new Map<number, StrengthSnapshot>()
+
+// Community Strength over the fixed basis window ending at `end`, plus its change
+// against the equally long window before it. Deliberately not routed through
+// relationships(), which builds the full edge/cluster/influence graph for a
+// whole window just to read six numbers off the top of it.
+export function strengthSnapshot(end: number): StrengthSnapshot {
+  const hit = strengthCache.get(end)
+  if (hit) return hit
+  const len = STRENGTH_BASIS_DAYS * DAY
+  const core = buildCore(end - len, end)
+  const prev = buildCore(end - 2 * len, end - len)
+  const snap: StrengthSnapshot = {
+    strength: core.strength,
+    strengthDelta: core.strength - prev.strength,
+    connectedness: core.connectedness,
+    participation: core.participation,
+    distribution: core.distribution,
+    relationshipQuality: core.relationshipQuality
+  }
+  strengthCache.set(end, snap)
+  return snap
 }
 
 export function relationships(start: number, end: number): RelationshipsData {

@@ -11,6 +11,7 @@ import { DateRangePicker } from '../components/DateRangePicker'
 import { CardTitle } from '../components/CardTitle'
 import { Change } from '../components/Change'
 import { TierPill } from '../components/TierPill'
+import { SparkBars } from '../components/SparkBars'
 import type { RangeProps } from './EngagementPage'
 
 const DAY = 86400000
@@ -26,14 +27,6 @@ function ActivityTooltip({ active, payload }: { active?: boolean; payload?: Arra
   const p = payload[0].payload
   return <div className="chart-tooltip"><span className="chart-tooltip-label">{p.date}</span><span className="chart-tooltip-value">Messages: {formatNumber(p.messages)}</span><span className="chart-tooltip-value">Reactions: {formatNumber(p.reactions)}</span></div>
 }
-
-function Spark({ bars, max, gray }: { bars: number[]; max: number; gray?: boolean }) {
-  return <div className={`mpp-spark${gray ? ' gray' : ''}`} aria-hidden="true">{bars.map((v, i) => (
-    <i key={i} style={{ height: `${max ? Math.max(7, (v / max) * 100) : 7}%` }} />
-  ))}</div>
-}
-
-const sparkMax = (bars: number[]) => bars.reduce((m, v) => Math.max(m, v), 0)
 
 export function MemberProfilePage({ memberId, onBack, range, custom, onSelectPreset, onSelectRange }: RangeProps & { memberId: string; onBack: () => void }) {
   const data = useMemo(() => {
@@ -89,14 +82,14 @@ export function MemberProfilePage({ memberId, onBack, range, custom, onSelectPre
         <div className="mpp-stat-head"><span>Messages</span></div>
         <div className="mpp-stat-row">
           <div className="mpp-stat-value"><h2>{formatNumber(data.messages)}</h2><Change v={data.messagesPct} range={effDays} /></div>
-          <Spark bars={data.msgBars} max={sparkMax(data.msgBars)} />
+          <SparkBars bars={data.msgBars} />
         </div>
       </div>
       <div className="mpp-stat-card">
         <div className="mpp-stat-head"><span>Voice sessions</span></div>
         <div className="mpp-stat-row">
           <div className="mpp-stat-value"><h2>{formatNumber(data.voice)}</h2><Change v={data.voicePct} range={effDays} /></div>
-          <Spark bars={data.voiceBars} max={sparkMax(data.voiceBars)} gray />
+          <SparkBars bars={data.voiceBars} gray />
         </div>
       </div>
     </div>
