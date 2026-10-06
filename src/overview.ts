@@ -24,7 +24,7 @@ export const windowDays = (start: Date, end: Date) => Math.max(1, Math.round((en
 // Both bars are required. Size alone lets a 5-member segment churn completely
 // and claim to be a crisis; share alone lets a 400-member segment drift by 40
 // and claim the same. The window is fixed at 7 days because findings are a "go
-// look at this now" prompt -- a 90-day net smooths away exactly the changes a CM
+// look at this now" prompt -- a 12-week net smooths away exactly the changes a CM
 // can still act on.
 //
 // Rolling cohorts are excluded outright. A `joinedWithinDays` segment is defined
@@ -172,10 +172,10 @@ export interface OverviewSparkBars {
   leftMembers: number[]
 }
 
-// A 90-day window would need 90 bars; at 4px wide plus a 3px gap that is 630px
-// inside a 266px card. Buckets are averaged for the two level series and summed
+// A 12-week (84-day) window would need 84 bars; at 4px wide plus a 3px gap that
+// is 609px inside a 266px card. Buckets are averaged for the two level series and summed
 // for the two event series, because averaging joins would invent fractional
-// members per day and summing a roster would report ninety times the community.
+// members per day and summing a roster would report eighty-four times the community.
 function resample(points: MembershipPoint[], key: 'roster' | 'active' | 'joined' | 'left'): number[] {
   if (points.length <= SPARK_BUCKETS) return points.map((p) => p[key])
   const flow = key === 'joined' || key === 'left'

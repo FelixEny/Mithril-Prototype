@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react'
 import { CalendarBlank, CaretDown, CaretLeft, CaretRight, CaretUp } from '@phosphor-icons/react'
 import { DayPicker, type DateRange } from 'react-day-picker'
 import 'react-day-picker/style.css'
-import type { RangeDays } from '../analytics'
+import type { RangeDays } from '../ranges'
+import { presetLabel, RANGE_PRESETS } from '../ranges'
 import { MenuItem } from './Menu'
 
 const DAY = 86400000
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const PRESETS: RangeDays[] = [7, 14, 30, 90]
 const fmtShort = (d: Date) => `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`
+// Every preset ends at the corpus endDate, so the printed span is always
+// `endDate - N days` through `endDate`. Single-day presets are not offered (a
+// one-day window empties the Activity-over-time series and has no
+// activation-eligible members), which is why no preset needs a one-date form.
+const fmtRange = (from: Date, to: Date) => `${fmtShort(from)} - ${fmtShort(to)}`
 const PickChevron = ({ orientation }: { orientation?: 'up' | 'down' | 'left' | 'right' }) =>
   orientation === 'left' ? <CaretLeft size={20} color="var(--content-secondary)"/> :
   orientation === 'right' ? <CaretRight size={20} color="var(--content-secondary)"/> :
@@ -27,11 +32,15 @@ export function DateRangePicker({ range, custom, endDate, onSelectPreset, onSele
   const [hoverRange, setHoverRange] = useState<DateRange | undefined>(undefined)
   const minDate = new Date(endDate.getTime() - 90 * DAY)
   const from = custom ? custom.from : new Date(endDate.getTime() - range * DAY)
-  const label = custom ? 'Custom range' : `Last ${range} days`
-  const value = `${fmtShort(from)} - ${fmtShort(custom ? custom.to : endDate)}`
+  const to = custom ? custom.to : endDate
+  // Both the closed trigger and the open rows read their label and their dates
+  // from the same preset descriptor, so the trigger can never print
+  // "Last 84 days" for the row the user just clicked.
+  const label = custom ? 'Custom range' : presetLabel(range)
+  const value = fmtRange(from, to)
 
   const open = () => {
-    setSel(custom ? { from: custom.from, to: custom.to } : { from, to: endDate })
+    setSel({ from, to })
     setPickerOpen(o => !o)
   }
   const choose = (d: RangeDays) => { onSelectPreset(d); setPickerOpen(false) }
@@ -60,13 +69,14 @@ export function DateRangePicker({ range, custom, endDate, onSelectPreset, onSele
       {pickerOpen && (
         <div className="dc-popover" role="dialog" aria-label="Choose reporting period">
           <div className="dc-list" role="listbox">
-            {PRESETS.map(d => (
+            {RANGE_PRESETS.map(p => (
               <MenuItem
-                key={d}
-                label={`Last ${d} days`}
-                selected={!custom && range === d}
-                onSelect={() => choose(d)}
-                onMouseEnter={() => hoverPreset(d)}
+                key={p.days}
+                label={p.label}
+                trailing={fmtRange(new Date(endDate.getTime() - p.days * DAY), endDate)}
+                selected={!custom && range === p.days}
+                onSelect={() => choose(p.days)}
+                onMouseEnter={() => hoverPreset(p.days)}
                 onMouseLeave={clearHover}
               />
             ))}

@@ -7,7 +7,7 @@ import { createServer } from 'vite'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const DAY = 86400000
-const days = Number(process.argv[2] || 30)
+const days = Number(process.argv[2] || 28)
 
 globalThis.fetch = async (url) => {
   const name = basename(String(url).split('?')[0])

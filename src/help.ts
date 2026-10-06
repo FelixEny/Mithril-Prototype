@@ -5,7 +5,7 @@ export const metricInfo: Record<string, string> = {
   'Net change': 'New members minus members who left, over the selected period. This is roster growth, not activity: a community can grow while engagement falls.',
   'Active members': 'The number of unique members who performed at least one qualifying activity during the selected period.',
   'New member activation': 'The percentage of eligible new members who performed at least one qualifying activity within 7 days of joining. Eligible members have had the full 7-day activation window.',
-  'Retention': 'The percentage of members who were active in the previous 30-day period and are active again in the current one.',
+  'Retention': 'The percentage of members who were active in the previous 28-day period and are active again in the current one.',
   'Messages': 'The total number of member-generated messages during the selected period. Replies are messages and are included.',
   'Reply rate': 'The percentage of messages that received at least one reply. A message with many replies still counts once.',
   'Reaction rate': 'The percentage of messages that received at least one reaction.',

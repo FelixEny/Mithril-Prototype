@@ -1,5 +1,8 @@
 import { channels, conversations, endDate, members, messages, presentAt, voiceSessions, type Message, type VoiceSession } from './data'
-export type RangeDays = 7 | 14 | 30 | 90
+import type { RangeDays } from './ranges'
+// Re-exported so the pages keep importing the window type from the analytics
+// entry point they already use; the preset list itself lives in ./ranges.
+export type { RangeDays } from './ranges'
 const day = 86400000; const unique = <T,>(items: T[]) => new Set(items)
 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 export const formatNumber = (value: number) => new Intl.NumberFormat('en-US', { notation: value > 9999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
@@ -252,10 +255,10 @@ export function dashboardWindow(start: Date, end: Date): DashboardWindow {
 // ---------------------------------------------------------------------------
 // `DashboardWindow.series` is capped at 30 points because the "Activity over time"
 // chart only has room for that many ticks. The Overview's four stat cards each
-// carry a sparkline across the *whole* selected range, so a 90-day window needs 90
-// bars -- and three of the four series it plots (roster, joined, left) are not in
-// `series` at all. Bucketing separately keeps the line chart's tick budget intact
-// instead of widening a series that already has a documented cap.
+// carry a sparkline across the *whole* selected range, so a 12-week (84-day)
+// window needs 84 bars -- and three of the four series it plots (roster, joined,
+// left) are not in `series` at all. Bucketing separately keeps the line chart's
+// tick budget intact instead of widening a series that already has a documented cap.
 //
 // Buckets use the same half-open `(from, to]` convention as `membershipFlow`, and
 // each bucket's roster is measured at its closing boundary with `presentAt`, so

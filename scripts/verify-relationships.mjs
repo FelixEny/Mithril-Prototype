@@ -183,5 +183,5 @@ function compute(start, winEnd) {
 }
 
 const daysArg = process.argv.slice(2).map(Number).filter((x) => x > 0)
-const windows = daysArg.length ? daysArg : [30, 90]
+const windows = daysArg.length ? daysArg : [28, 84]
 for (const d of windows) compute(end - d * DAY, end)

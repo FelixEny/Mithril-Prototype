@@ -2,7 +2,7 @@
 //
 // Loads the real app modules through vite's SSR runner (no new tooling;
 // handles TS + `?url` imports) with a fetch shim reading the mock JSON corpus
-// from disk, then checks the REAL 7/14/30/90d populations:
+// from disk, then checks the REAL 7/14/28/84d populations:
 //   1. determinism: two runLayout runs -> byte-identical positions (required)
 //   2. validity: every member positioned, finite, inside the world rect (required)
 //   3. rebuild freshness: filtered populations position exactly their members (required)
@@ -10,10 +10,10 @@
 //   5. structure: connected pairs closer on average than random pairs (required)
 //   6. timing: wall ms reported (fails over budget)
 //
-// Run: node scripts/check-layout.mjs [days...] (default: 7 14 30 90; dev server NOT required)
+// Run: node scripts/check-layout.mjs [days...] (default: 7 14 28 84; dev server NOT required)
 //
 // Every shipped range is checked because the seed ring scales its radius with
-// graph density (RING_A/RING_B in layout.ts), so a 30d/90d-only run would not
+// graph density (RING_A/RING_B in layout.ts), so a 28d/84d-only run would not
 // exercise the sparse 7d/14d ends of that curve.
 
 import { readFileSync } from 'node:fs'
@@ -22,8 +22,8 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const DAY = 86400000
-// Must match RangeDays in src/analytics.ts.
-const VALID_RANGES = [7, 14, 30, 90]
+// Must match RangeDays in src/ranges.ts.
+const VALID_RANGES = [7, 14, 28, 84]
 const argDays = process.argv.slice(2).map(Number).filter((d) => VALID_RANGES.includes(d))
 const RANGES = argDays.length ? argDays : VALID_RANGES
 

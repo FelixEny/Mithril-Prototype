@@ -39,11 +39,12 @@ const GOLDEN_ANGLE = 2.399963
 //
 // RING_A/RING_B set the ring's radius and are scaled by ln(meanDegree) because
 // one fixed radius cannot serve both ends of the density range: a ring wide
-// enough for 7d collides on the denser 90d graph, one tight enough for 90d
-// leaves 7d visibly gappy. Fitted against all four real ranges (mean degree
-// 6.13 / 8.48 / 12.36 / 20.09 for 7/14/30/90d), these hold 5-NN community
-// purity at 78/81/77/73% while cutting the 30d cross-vs-intra edge length ratio
-// from 4.11 to 2.60 — that ratio was the artifact, since it stretched the 36
+// enough for 7d collides on the denser 84d graph, one tight enough for 84d
+// leaves 7d visibly gappy. Fitted against all four shipped ranges (mean degree
+// 6.13 / 8.48 / 11.89 / 19.66 for 7/14/28/84d), these hold the gate shares the
+// script re-checks -- stacked 0.8 / 0.9 / 4.2 / 15.8%, deep-blob 0 / 0 / 0 / 1.0% --
+// while cutting the mid-range cross-vs-intra edge length ratio
+// from 4.11 to 2.60 -- that ratio was the artifact, since it stretched the 36
 // real cross-community links to four times the length of intra-community ones.
 //
 // The radius is a deliberate trade-off against that purity, so recalibrate
@@ -52,7 +53,7 @@ const GOLDEN_ANGLE = 2.399963
 // A=1 B=1, which equalises the mean gap near 50 world units but drops purity to
 // 65-76% and blends the communities into one mass. Raise these constants if
 // distinctness matters more than whitespace, and re-run
-// `node scripts/check-layout.mjs 7 14 30 90` after regenerating the corpus.
+// `node scripts/check-layout.mjs 7 14 28 84` after regenerating the corpus.
 const RING_A = 1.3
 const RING_B = 1.2
 // Degenerate populations (e.g. the synthetic bench graph) can have no edges at

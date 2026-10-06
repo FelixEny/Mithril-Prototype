@@ -9,6 +9,7 @@ import { RelationshipsPage } from './pages/RelationshipsPage'
 import { PeoplePage } from './pages/PeoplePage'
 import { loadData } from './data'
 import { RangeDays } from './analytics'
+import { DEFAULT_RANGE } from './ranges'
 import { ToastProvider } from './toast'
 import { Toaster } from './components/Toaster'
 import type { ReactNode } from 'react'
@@ -41,7 +42,7 @@ const isBench = () => window.location.hash.startsWith('#/bench')
 export default function App() {
   const [bench, setBench] = useState(isBench)
   const [page, setPage] = useState<PageKey>(hashPage)
-  const [range, setRange] = useState<RangeDays>(30)
+  const [range, setRange] = useState<RangeDays>(DEFAULT_RANGE)
   const [custom, setCustom] = useState<{ from: Date; to: Date } | null>(null)
   const [ready, setReady] = useState(false)
   const [warm, setWarm] = useState(false)

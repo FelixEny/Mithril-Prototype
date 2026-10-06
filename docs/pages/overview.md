@@ -87,7 +87,7 @@ The chart type follows the series, not the card:
 
 - **Level series** (`roster`, `active`) use `SparkArea`, because a level series needs
   its *slope*. Bars are sized against the tallest bar in the run, and the roster only
-  moves 2379 → 2507 across 90 days — under bars every bar lands within ~2px of the
+  moves 2379 → 2507 across the longest window — under bars every bar lands within ~2px of the
   tallest, so the chart is a solid block that reports nothing.
 - **Flow series** (`joined`, `left`) stay on `SparkBars`, because a bar length means
   "this many happened in this bucket". An area would imply continuity between
@@ -119,9 +119,9 @@ point per day across the **full** window (no 30-day cap, unlike
 
 Longer windows are resampled to `SPARK_BUCKETS` (28). Levels are **averaged** and
 flows are **summed**: averaging joins would invent fractional members per day, and
-summing a roster would report ninety times the community.
+summing a roster would report the window over and over.
 
-A 90-day window therefore still draws 28 points at the same weight as a 30-day one,
+An 84-day (12-week) window therefore still draws 28 points at the same weight as a 28-day one,
 and the flow bars stay proportional to the totals the card above them reports. A
 7-day window yields fewer than 28 points, so its area is correspondingly more angular.
 
@@ -140,11 +140,11 @@ place of the 12px `metrics-title` padding.
 The score is pinned to a **fixed 28-day basis** (`STRENGTH_BASIS_DAYS`) and does
 **not** respond to the date picker's length. An edge only exists once a pair clears
 two interactions across two days, so every component is a function of how long you
-watched — on this corpus connectedness reads 10.8 / 15.8 / 25.2 / 36.5 at
-7 / 14 / 28 / 90 days. That is a measurement artifact, not the community changing.
+watched — on this corpus connectedness reads 10.8 / 15.8 / 24.0 / 35.4 at
+7 / 14 / 28 / 84 days. That is a measurement artifact, not the community changing.
 
 What *is* pinned is the length, not the end date. All presets end at `endDate`, so
-switching 7d → 90d leaves the score byte-identical, while a custom end date does move
+switching 7d → 84d leaves the score byte-identical, while a custom end date does move
 it — that is a genuine 28-day period compared like-for-like against the 28 days
 before it, the same equal-length comparison `strengthDelta` already makes.
 

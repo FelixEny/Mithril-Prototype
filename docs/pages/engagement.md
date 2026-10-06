@@ -28,7 +28,7 @@ Engagement answers four questions:
 | Metric | Definition / calculation | Notes |
 | --- | --- | --- |
 | **Active Members** | Unique members who performed at least one qualifying activity during the selected period. | Qualifying activity: sent a message, added a reaction, or participated in voice. |
-| **Active Member Rate** | Active Members ÷ window roster × 100. | Preferred label over "Participation Rate". The denominator is everyone on the server at any point in the selected period, not the end-of-period total: a member who was active in the window and then left could still participate, so dividing by the end-of-period roster overstates the rate and can exceed 100% at 90 days. |
+| **Active Member Rate** | Active Members ÷ window roster × 100. | Preferred label over "Participation Rate". The denominator is everyone on the server at any point in the selected period, not the end-of-period total: a member who was active in the window and then left could still participate, so dividing by the end-of-period roster overstates the rate and can exceed 100% over the longest window (12 weeks). |
 | **New Member Activation** | Eligible new members who performed at least one qualifying activity within 7 days of joining ÷ eligible new members × 100. | Eligible members have had the full 7-day activation window. |
 | **30-day Retention** | Members active in the previous 30-day period who are active again in the current 30-day period ÷ members active in the previous 30-day period × 100. | Canonical retention metric; not a new-member metric. |
 
@@ -93,7 +93,7 @@ Members are assigned one canonical activity tier using a trailing 28-day window.
 **The tier distribution does not respond to the date range.** It is the one
 Engagement card that is deliberately period-independent: the tier engine is
 anchored to the window end and always measures the trailing 28 days, so
-selecting 7/14/30/90 days (or a custom range) leaves this card unchanged. This
+selecting 7/14/28/84 days (or a custom range) leaves this card unchanged. This
 is required, not a bug — the tier is the *shared canonical member attribute*
 rendered on Engagement, People, member profiles, the member popup, saved
 segments, and as the Influence Score window on Relationships. Making this card

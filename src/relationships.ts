@@ -107,7 +107,7 @@ const FREQ_K = 4
 //
 // An edge only exists once a pair clears two interactions across two days, so
 // every component is really a function of how long you watched: on this corpus
-// connectedness runs 10.8 / 15.8 / 25.2 / 36.5 at 7 / 14 / 28 / 90 days.
+// connectedness runs 10.8 / 15.8 / 24.0 / 35.4 at 7 / 14 / 28 / 84 days.
 // That is a measurement-window artifact, not the community changing, so the
 // score is computed over a fixed length and the date picker's *length* must not
 // reach it. The end still follows the picker, so a custom end date does move the
