@@ -250,6 +250,19 @@ Two deliberate departures from a plain Semibold-heading reading:
   `--content-secondary`, not Semibold in `--content-primary`, which reads as a
   greeting rather than a page title. It is carried by
   `.page-title.greeting-title h1` rather than a new scale step.
+  - Its trailing emoji is `20px` — deliberately off the scale. The glyph is an
+    ornament on the greeting rather than a member of it, and colour emoji fill
+    nearly the whole em box while lowercase Latin sits well inside it, so
+    inheriting the 24px wordmark's size makes the emoji outweigh the words it
+    decorates. 20px sits the glyph's ink against the 24px cap height instead of
+    against its em box; no scale step lands there, and the value is never
+    reused, so it stays a raw `font-size` on `.greeting-emoji` rather than
+    earning a token. The `0.25em` gap before it scales with the glyph rather
+    than with the type scale.
+    `greeting()` in `src/overview.ts` returns `{ text, emoji }` so the glyph is
+    a separate node — `aria-hidden`, since the four bands are already stated in
+    words. A wrapper with no size of its own would only inherit the 24px and
+    change nothing.
 - The **Overview lead story** is 36px at `--font-weight-medium`, with Semibold
   reserved for its `<strong>` figure runs — Medium for the connective grammar,
   Semibold for the numbers the sentence is holding up. Its `max-width` is `56ch`,
@@ -280,7 +293,7 @@ inherited their font size; they now use `--font-size-12` and `--font-size-28`.
 
 # Avatar Initials
 
-Avatar initials are a single uppercase character on a tinted disc, drawn in `--font-family` at `--font-weight-semibold` in `--surface-primary`. They are **not** a step of the type scale and carry no `--font-size-*` or `--line-height-*` token: the glyph is sized from the disc it sits in, so it reads identically at 8px and at 88px. `.avatar` therefore keeps a raw `line-height:1`, which is intentional — every other raw typography value is a bug.
+Avatar initials are a single uppercase character on a tinted disc, drawn in `--font-family` at `--font-weight-semibold` in `--surface-primary`. They are **not** a step of the type scale and carry no `--font-size-*` or `--line-height-*` token: the glyph is sized from the disc it sits in, so it reads identically at 8px and at 88px. `.avatar` therefore keeps a raw `line-height:1`, which is intentional. So does `.greeting-emoji`'s raw `font-size:20px` (documented under the type scale above) — the two exceptions are sizes that serve an object other than the type scale, a disc and a colour emoji respectively. Every other raw typography value is a bug.
 
 - **Scale**: `avatarInitialSize(discDiameterPx)` in `src/avatars.ts` is the single source of truth, consumed by both the DOM `Avatar` component and the graph's baked avatar atlas. Its anchors are (disc, glyph) pairs — 8/4, 20/9, 32/13, 52/20, 88/34 — interpolated in between. The glyph/disc ratio eases from ~0.50 at 8px to ~0.39 at 88px, because a tiny disc needs a relatively larger glyph to stay legible while a large one needs a relatively smaller glyph to stay balanced. Do not reintroduce a fixed percentage of the disc.
 - **Optics**: the glyph is centred on its **measured ink box**, not its em box — a single character's ink is narrower and taller than its em box, so `text-align`/`vertical-align` centering leaves it visibly off-centre. Plain capitals measure 17px of cap in the graph's 62px sampled disc (27%); descender glyphs such as `Q` reach ~35%. A further lift of `--avatar-initial-optical-lift` (0.0146em) compensates for a glyph reading slightly low in a circle; the token is em-relative so the DOM and the canvas bake convert it identically.

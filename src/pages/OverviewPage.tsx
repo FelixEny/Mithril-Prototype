@@ -50,8 +50,12 @@ export function OverviewPage({ range, custom, onSelectPreset, onSelectRange, onN
     }
   }, [range, custom])
 
+  // Read once at render time, so the band the visitor first sees is the band
+  // that stays for the session rather than ticking over while the page is open.
+  const h = greeting(new Date())
+
   return <>
-    <PageHeader title={greeting(new Date())} headerClassName="header-greeting" titleClassName="greeting-title" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange}/>}/>
+    <PageHeader title={<>{h.text}<span className="greeting-emoji" aria-hidden="true">{h.emoji}</span></>} headerClassName="header-greeting" titleClassName="greeting-title" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange}/>}/>
     <p className="lead-story">{story.runs.map((r, i) => r.strong ? <strong key={i}>{r.text}</strong> : <span key={i}>{r.text}</span>)}</p>
     <div className="core-grid">
       {/* `footer` is `Stat`'s optional supporting line. Each footer states a ratio, so

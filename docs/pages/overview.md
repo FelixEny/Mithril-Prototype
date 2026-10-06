@@ -32,15 +32,19 @@ matching emoji:
 
 | Local hour | Greeting |
 | --- | --- |
-| `h < 12` | `Good Morning 🌅` |
-| `h < 18` | `Good Afternoon ☀️` |
-| `h < 22` | `Good Evening 🌆` |
-| otherwise | `Good Night 🌙` |
+| `h < 12` | `Good Morning` 🌅 |
+| `h < 18` | `Good Afternoon` ☀️ |
+| `h < 22` | `Good Evening` 🌆 |
+| otherwise | `Good Night` 🌙 |
 
-Both words are capitalised. The line renders at 24px Medium in
-`--content-secondary` — a greeting, not a page title, so it is set quieter than the
-28px Semibold primary headings on the other pages. It is evaluated at render time,
-so it does not tick over while the page stays open.
+Both words are capitalised. The function returns `{ text, emoji }` rather than one
+string so the emoji can be wrapped in `.greeting-emoji` and sized independently —
+see the type scale in `docs/design.md` for why it is 20px against the 24px wordmark.
+The words render at 24px Medium in `--content-secondary` — a greeting, not a page
+title, so it is set quieter than the 28px Semibold primary headings on the other
+pages. It is evaluated at render time, so it does not tick over while the page
+stays open. The emoji is `aria-hidden`, since the band is already named by the
+words beside it.
 
 It does **not** name a person. Mithril has no account model in the prototype, and
 a hard-coded name would assert something the data does not know. Figma's "Good

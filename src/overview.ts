@@ -213,11 +213,17 @@ export function overviewSparkBars(w: DashboardWindow): OverviewSparkBars {
 // the person looking at the screen. The emoji tracks the same four bands so
 // the line reads differently across a full day. Evaluated at render time, so
 // it does not tick over while the page stays open.
+//
+// The emoji is returned separately from the words so it can carry its own
+// size. It is an ornament, not a line of type: rendered inline it inherits the
+// 24px wordmark and outweighs it, because colour emoji fill nearly the whole
+// em box while lowercase Latin sits well inside it. Splitting it out gives the
+// caller a hook to size it against the text it decorates.
 
-export function greeting(now: Date): string {
+export function greeting(now: Date): { text: string; emoji: string } {
   const h = now.getHours()
-  if (h < 12) return 'Good Morning \u{1F305}'
-  if (h < 18) return 'Good Afternoon \u2600\uFE0F'
-  if (h < 22) return 'Good Evening \u{1F306}'
-  return 'Good Night \u{1F319}'
+  if (h < 12) return { text: 'Good Morning', emoji: '\u{1F305}' }
+  if (h < 18) return { text: 'Good Afternoon', emoji: '\u2600\uFE0F' }
+  if (h < 22) return { text: 'Good Evening', emoji: '\u{1F306}' }
+  return { text: 'Good Night', emoji: '\u{1F319}' }
 }
