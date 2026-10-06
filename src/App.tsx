@@ -65,7 +65,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     loadData()
-      .then(() => document.fonts.load('600 40px Geist'))
+      .then(() => document.fonts.load('600 36px Geist'))
       .catch(() => {})
       .then(() => document.fonts.ready)
       .catch(() => {})

@@ -48,11 +48,17 @@ Morning Felix 🌅," is placeholder copy for a state the prototype does not mode
 
 ## 4. Lead story
 
-One sentence at 40px Medium, with a 24px (`--space-2xl`) bottom margin. Its
+One sentence at 36px Medium, with a 24px (`--space-2xl`) bottom margin. Its
 load-bearing figures are set in `--content-primary` at Semibold while the
 connective grammar stays in `--content-secondary` Medium. `overviewStory()`
 returns an array of runs rather than a string precisely so that emphasis can land
-on the numbers.
+on the numbers. The `56ch` measure is the content column itself — `main` caps at
+`1440px` and its sidebar margin plus padding leave `1368px` — so the lead story is
+never held narrower than the grid it sits in. It does not lengthen the sentence:
+the single-clause story measures `932px` of ink and the two-clause one `1606px`
+against a `1357px` box, and `text-wrap: balance` keeps the long form's two lines
+near-equal, so no value of the measure changes a line break. See `design.md` for
+the full measurement.
 
 Membership direction leads, because it is the only thing on this screen that
 changes hands.

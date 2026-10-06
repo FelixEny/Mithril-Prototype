@@ -110,7 +110,7 @@ export function overviewFindings(asOf: Date = endDate, days = FINDING_WINDOW_DAY
 // ---------------------------------------------------------------------------
 // Lead story
 // ---------------------------------------------------------------------------
-// One sentence a CM reads before anything else on the page. It is a single 40px
+// One sentence a CM reads before anything else on the page. It is a single 36px
 // paragraph whose load-bearing figures are set in `--content-primary` and whose
 // connective grammar stays in `--content-secondary`, so the eye lands on the
 // numbers rather than the sentence holding them up. That is why this returns runs

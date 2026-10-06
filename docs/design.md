@@ -191,7 +191,7 @@ LH = Line Height; LS = Letter Spacing.
 
 Typography is expressed as four independent token groups in `src/tokens.css`:
 
-- `--font-size-<size>` — the size. Seven steps: `10`, `12`, `14`, `16`, `24`, `28`, `40`.
+- `--font-size-<size>` — the size. Seven steps: `10`, `12`, `14`, `16`, `24`, `28`, `36`.
 - `--font-weight-<weight>` — the weight. Four variants: `regular` (400), `medium` (500), `semibold` (600), `bold` (700).
 - `--line-height-<size>` — one line height per size, **shared by every weight at that size**.
 - `--letter-spacing-<size>` — one letter spacing per size, **shared by every weight at that size**.
@@ -225,7 +225,7 @@ Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS 
 | 16px | `--line-height-16`, `--letter-spacing-16` | `md` / card `title` |
 | 24px | `--line-height-24`, `--letter-spacing-24` | `Heading/sm`, stat values |
 | 28px | `--line-height-28`, `--letter-spacing-28` | `Heading/lg`, page titles |
-| 40px | `--line-height-40`, `--letter-spacing-40` | lead story (`.lead-story`) |
+| 36px | `--line-height-36`, `--letter-spacing-36` | lead story (`.lead-story`) |
 
 ### The one exception: 16px
 
@@ -242,7 +242,7 @@ Both are declared where used; the generic `h3` rule takes `--line-height-16-titl
 Most steps use a single weight, but every size may carry any of the four:
 
 - 10px Regular · 12px Regular/Medium/Semibold · 14px Regular/Medium/Semibold
-- 16px Medium/Semibold · 24px Medium/Semibold · 28px Semibold/Bold · 40px Medium/Semibold
+- 16px Medium/Semibold · 24px Medium/Semibold · 28px Semibold/Bold · 36px Medium/Semibold
 
 Two deliberate departures from a plain Semibold-heading reading:
 
@@ -250,9 +250,25 @@ Two deliberate departures from a plain Semibold-heading reading:
   `--content-secondary`, not Semibold in `--content-primary`, which reads as a
   greeting rather than a page title. It is carried by
   `.page-title.greeting-title h1` rather than a new scale step.
-- The **Overview lead story** is 40px at `--font-weight-medium`, with Semibold
+- The **Overview lead story** is 36px at `--font-weight-medium`, with Semibold
   reserved for its `<strong>` figure runs — Medium for the connective grammar,
-  Semibold for the numbers the sentence is holding up.
+  Semibold for the numbers the sentence is holding up. Its `max-width` is `56ch`,
+  which is the content column itself rather than a typographic limit: `main` caps
+  at `1440px`, minus its `250px` sidebar margin and `48px`/`24px` padding, leaves
+  `1368px`, and `1ch` resolves to `24.228px` at 36px Geist Medium with
+  `--letter-spacing-36` applied — `56ch` = `1357px`, 11px inside the column.
+  Raising it past `56ch` changes nothing at any viewport, because the parent
+  stops it first.
+
+  The measure is a ceiling the copy never reaches, not a lever on line length.
+  Measured live, the single-clause story is `932px` of ink and the two-clause one
+  `1606px` against a `1357px` box, so the short form is one line at *any* measure
+  from `40ch` up, and the long form needs `66ch` to become one line — past the
+  ceiling, so it stays two. `text-wrap: balance` then holds the long form's two
+  lines near-equal at roughly `798px` each regardless of the measure. Widening the
+  box therefore changes no line break and no ink width; it only stops the rule from
+  describing a narrower column than the one it sits in. Below a `1533px` viewport
+  the parent is already under `1211px` and the value does not bind at all.
 - `.bench h2` (BenchmarkPage) is 28px **Bold** — the only Bold text in the app.
 
 ### Historical note
@@ -269,7 +285,7 @@ Avatar initials are a single uppercase character on a tinted disc, drawn in `--f
 - **Scale**: `avatarInitialSize(discDiameterPx)` in `src/avatars.ts` is the single source of truth, consumed by both the DOM `Avatar` component and the graph's baked avatar atlas. Its anchors are (disc, glyph) pairs — 8/4, 20/9, 32/13, 52/20, 88/34 — interpolated in between. The glyph/disc ratio eases from ~0.50 at 8px to ~0.39 at 88px, because a tiny disc needs a relatively larger glyph to stay legible while a large one needs a relatively smaller glyph to stay balanced. Do not reintroduce a fixed percentage of the disc.
 - **Optics**: the glyph is centred on its **measured ink box**, not its em box — a single character's ink is narrower and taller than its em box, so `text-align`/`vertical-align` centering leaves it visibly off-centre. Plain capitals measure 17px of cap in the graph's 62px sampled disc (27%); descender glyphs such as `Q` reach ~35%. A further lift of `--avatar-initial-optical-lift` (0.0146em) compensates for a glyph reading slightly low in a circle; the token is em-relative so the DOM and the canvas bake convert it identically.
 - **Graph**: the atlas holds one cell per avatar key, so one baked glyph serves every node size and the proportion is constant across the graph's 8–52px range by design — including dimmed nodes, whose initials were previously large enough to fill the disc and read as a white blob. Per-size cells would need size-bucketed keys and are capped at three buckets by the atlas page budget. The bake must be given the cell's **sampled** diameter (`CONTENT / 2`), not the full cell: the node shader's UV ray is twice the disc radius, so only the cell's central half is visible on screen. Feeding the full cell width renders every initial at roughly twice its intended size.
-- **Font readiness**: initials are centred from font metrics, so they bake and measure against real `Geist` outlines. `App` awaits `document.fonts.load('600 40px Geist')` before any screen renders.
+- **Font readiness**: initials are centred from font metrics, so they bake and measure against real `Geist` outlines. `App` awaits `document.fonts.load('600 36px Geist')` before any screen renders — a load probe for the Semibold face, so the size only needs to be a real step on the scale.
 
 # Shadows
 

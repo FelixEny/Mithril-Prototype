@@ -163,7 +163,7 @@
 .search-match-user{font-size:var(--font-size-12);color:var(--content-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .search-match-cluster{flex:none;font-size:var(--font-size-12);color:var(--content-secondary)}
 /* Overview: lead story, stat sparklines, insight columns, Mithril feed. */
-.lead-story{font-size:var(--font-size-40);font-weight:var(--font-weight-medium);line-height:var(--line-height-40);letter-spacing:var(--letter-spacing-40);color:var(--content-secondary);margin:0 0 var(--space-2xl);max-width:44ch;padding-left:var(--space-xs)}
+.lead-story{font-size:var(--font-size-36);font-weight:var(--font-weight-medium);line-height:var(--line-height-36);letter-spacing:var(--letter-spacing-36);color:var(--content-secondary);margin:0 0 var(--space-2xl);max-width:44ch;padding-left:var(--space-xs)}
 .lead-story strong{font-weight:var(--font-weight-medium);color:var(--content-primary)}
 .core-grid .card .spark-bars,.core-grid .card .spark-area{margin-top:auto;padding-top:var(--space-sm)}
 .insights-card{margin-bottom:var(--space-lg);padding:0}
