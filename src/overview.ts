@@ -214,16 +214,21 @@ export function overviewSparkBars(w: DashboardWindow): OverviewSparkBars {
 // the line reads differently across a full day. Evaluated at render time, so
 // it does not tick over while the page stays open.
 //
-// The emoji is returned separately from the words so it can carry its own
+// The glyph is returned separately from the words so it can carry its own
 // size. It is an ornament, not a line of type: rendered inline it inherits the
 // 24px wordmark and outweighs it, because colour emoji fill nearly the whole
 // em box while lowercase Latin sits well inside it. Splitting it out gives the
 // caller a hook to size it against the text it decorates.
+//
+// The value is the file name of a vendored Fluent Emoji SVG in /public/emoji,
+// not a Unicode codepoint. A codepoint would be drawn by whatever emoji font
+// the viewer's OS happens to ship, so the greeting would be a different shape
+// on every machine; the vendored set renders identically everywhere.
 
 export function greeting(now: Date): { text: string; emoji: string } {
   const h = now.getHours()
-  if (h < 12) return { text: 'Good Morning', emoji: '\u{1F305}' }
-  if (h < 18) return { text: 'Good Afternoon', emoji: '\u2600\uFE0F' }
-  if (h < 22) return { text: 'Good Evening', emoji: '\u{1F306}' }
-  return { text: 'Good Night', emoji: '\u{1F319}' }
+  if (h < 12) return { text: 'Good Morning', emoji: 'sunrise' }
+  if (h < 18) return { text: 'Good Afternoon', emoji: 'sun' }
+  if (h < 22) return { text: 'Good Evening', emoji: 'cityscape-at-dusk' }
+  return { text: 'Good Night', emoji: 'crescent-moon' }
 }

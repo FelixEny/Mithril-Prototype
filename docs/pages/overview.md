@@ -28,27 +28,33 @@ Top to bottom, in Figma v1 order (`947:53781`):
 `greeting(now)` in `src/overview.ts` resolves from the viewer's local hour — the
 PC's own timezone via `getHours()`, deliberately *not* the corpus timezone, since
 it is a greeting to the person looking at the screen. Four bands, each with a
-matching emoji:
+matching glyph:
 
-| Local hour | Greeting |
-| --- | --- |
-| `h < 12` | `Good Morning` 🌅 |
-| `h < 18` | `Good Afternoon` ☀️ |
-| `h < 22` | `Good Evening` 🌆 |
-| otherwise | `Good Night` 🌙 |
+| Local hour | Greeting | Glyph |
+| --- | --- | --- |
+| `h < 12` | `Good Morning` | `sunrise` |
+| `h < 18` | `Good Afternoon` | `sun` |
+| `h < 22` | `Good Evening` | `cityscape-at-dusk` |
+| otherwise | `Good Night` | `crescent-moon` |
 
-Both words are capitalised. The function returns `{ text, emoji }` rather than one
-string so the emoji can be wrapped in `.greeting-emoji` and sized independently —
-see the type scale in `docs/design.md` for why it is 20px against the 24px wordmark.
+The glyph value is the file name of a vendored Fluent Emoji SVG in
+`public/emoji/`, not a Unicode codepoint — a codepoint would be drawn by
+whatever emoji font the viewer's OS ships, so the greeting would render as a
+different shape on every machine. Both words are capitalised. The function
+returns `{ text, emoji }` rather than one string so the glyph can be rendered
+as an `<img>` in `.greeting-emoji` and sized independently — see the type scale
+in `docs/design.md` for why the box is 22px against the 24px wordmark.
 The words render at 24px Medium in `--content-secondary` — a greeting, not a page
 title, so it is set quieter than the 28px Semibold primary headings on the other
 pages. It is evaluated at render time, so it does not tick over while the page
-stays open. The emoji is `aria-hidden`, since the band is already named by the
+stays open. The glyph is `aria-hidden`, since the band is already named by the
 words beside it.
 
 It does **not** name a person. Mithril has no account model in the prototype, and
 a hard-coded name would assert something the data does not know. Figma's "Good
-Morning Felix 🌅," is placeholder copy for a state the prototype does not model.
+Morning Felix 🌅," is placeholder copy for a state the prototype does not model —
+and the one place a Unicode codepoint still appears in this repo, since it quotes
+the design rather than rendering it.
 
 ## 4. Lead story
 

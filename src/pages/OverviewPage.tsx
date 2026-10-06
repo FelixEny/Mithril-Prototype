@@ -55,7 +55,7 @@ export function OverviewPage({ range, custom, onSelectPreset, onSelectRange, onN
   const h = greeting(new Date())
 
   return <>
-    <PageHeader title={<>{h.text}<span className="greeting-emoji" aria-hidden="true">{h.emoji}</span></>} headerClassName="header-greeting" titleClassName="greeting-title" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange}/>}/>
+    <PageHeader title={<>{h.text}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange}/>}/>
     <p className="lead-story">{story.runs.map((r, i) => r.strong ? <strong key={i}>{r.text}</strong> : <span key={i}>{r.text}</span>)}</p>
     <div className="core-grid">
       {/* `footer` is `Stat`'s optional supporting line. Each footer states a ratio, so
