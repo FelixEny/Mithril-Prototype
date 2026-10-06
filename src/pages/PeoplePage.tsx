@@ -346,8 +346,8 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
                   {r.roles[0] ? <span className="role-pill"><i className="role-dot" style={{ background: r.roles[0].color }} />{r.roles[0].name}</span> : <span className="role-pill empty">&mdash;</span>}
                   {rest.length > 0 && <span className="role-pill more" tabIndex={0}>{`+${rest.length}`}<span className="tip" role="tooltip">{rest.map((n) => <span className="pp-role-label" key={n.id}><i className="role-dot" style={{ background: n.color }} />{n.name}</span>)}</span></span>}
                 </div></div>
-                <div className="pt-cell">{joinFmt.format(r.joinedAtMs)}</div>
-                <div className="pt-cell">{lastText}</div>
+                <div className="pt-cell pt-num">{joinFmt.format(r.joinedAtMs)}</div>
+                <div className="pt-cell pt-num">{lastText}</div>
                 <div className="pt-cell"><Sparkline series={r.series} /></div>
               </div>
             })}
