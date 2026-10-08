@@ -4,10 +4,9 @@ import { PageHeader } from '../components/PageHeader'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { Card } from '../components/Card'
 import { CardTitle } from '../components/CardTitle'
-import { Insight } from '../components/Insight'
+import { MetricsCard } from '../components/MetricsCard'
 import { Label } from '../components/Label'
 import { Change } from '../components/Change'
-import { Stat } from '../components/Stat'
 import { Avatar } from '../components/Avatar'
 import { Menu, MenuItem } from '../components/Menu'
 import { metricInfo } from '../help'
@@ -168,25 +167,14 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   // of the community total. The Change and tooltip are community-scoped, so both
   // are dropped while a selection is active.
   const selInfo = selected ? rel.memberInfo.get(selected) : undefined
-  const sortedDegrees = [...rel.degree.values()].sort((a, b) => b - a)
-  const topSlice = sortedDegrees.slice(0, Math.max(1, Math.ceil(sortedDegrees.length * 0.1)))
-  const degreeSum = sortedDegrees.reduce((a, x) => a + x, 0)
-  const topShare = degreeSum > 0 ? Math.round((topSlice.reduce((a, x) => a + x, 0) / degreeSum) * 100) : 0
-  const insight = (
-    <>The most connected 10% of members hold <b>{topShare}%</b> of all connections.{rel.bridgeCount > 0 && <> <b>{rel.bridgeCount}</b> {rel.bridgeCount === 1 ? 'member bridges' : 'members bridge'} separate clusters.</>}</>
-  )
   return <>
     <PageHeader title="Relationships" subtitle="Understand how members connect, influence and bridge your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
-    <Card className="metrics">
-      <CardTitle title="Network summary" className="metrics-title" />
-      <div className="metric-row">
-        <div className="metric"><Stat layout="below" label="Connected members" info={metricInfo['Connected members']} value={formatNumber(rel.connectedCount)} change={{ v: connectedPct, range: effDays, caption: 'vs last period' }} /></div>
-        <div className="metric"><Stat layout="below" label="Weak connected members" info={metricInfo['Weak connected members']} value={formatNumber(rel.lessConnectedCount)} change={{ v: lessPct, range: effDays, caption: 'vs last period' }} /></div>
-        <div className="metric"><Stat layout="below" label="Avg. connections per member" info={metricInfo['Avg. connections per member']} value={rel.avgConnections.toFixed(1)} change={{ v: avgPct, range: effDays, caption: 'vs last period' }} /></div>
-        <div className="metric"><Stat layout="below" label="Clusters" info={metricInfo['Clusters']} value={String(rel.clusters.length)} change={{ v: 0, range: effDays, caption: 'vs last period' }} /></div>
-      </div>
-      <div className="metrics-insight"><Insight>{insight}</Insight></div>
-    </Card>
+    <MetricsCard title="Network summary" stats={[
+      { label: 'Connected members', info: metricInfo['Connected members'], value: formatNumber(rel.connectedCount), change: { v: connectedPct, range: effDays } },
+      { label: 'Weak connected members', info: metricInfo['Weak connected members'], value: formatNumber(rel.lessConnectedCount), change: { v: lessPct, range: effDays } },
+      { label: 'Avg. connections per member', info: metricInfo['Avg. connections per member'], value: rel.avgConnections.toFixed(1), change: { v: avgPct, range: effDays } },
+      { label: 'Clusters', info: metricInfo['Clusters'], value: String(rel.clusters.length), change: { v: 0, range: effDays } },
+    ]}/>
     <Card className={fullscreen ? 'graph-card fullscreen' : 'graph-card'}>
       <div className="graph-head">
         <div className="graph-stat">

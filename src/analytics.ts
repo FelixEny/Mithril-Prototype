@@ -1,4 +1,4 @@
-import { channels, conversations, endDate, members, messages, presentAt, voiceSessions, type Message, type VoiceSession } from './data'
+import { channels, conversations, endDate, members, messages, presentAt, voiceSessions, type Member, type Message, type VoiceSession } from './data'
 import type { RangeDays } from './ranges'
 // Re-exported so the pages keep importing the window type from the analytics
 // entry point they already use; the preset list itself lives in ./ranges.
@@ -293,3 +293,128 @@ export function membershipSeries(start: Date, end: Date): MembershipPoint[] {
   membershipSeriesCache.set(cacheKey, out)
   return out
 }
+
+// ---------------------------------------------------------------------------
+// Monthly retention by tenure cohort
+// ---------------------------------------------------------------------------
+// The Retention card plots the canonical 30-day retention rate (active in the
+// prior 30 days and still on the roster at the window boundary, returning in
+// the current 30 days) for each of the last six months, segmented by tenure at
+// the boundary: "New (28 days)", "30 - 90 days", "90 - 180 days". Every cohort
+// uses the same definition, so the series decompose the single headline rate.
+export interface RetentionPoint { label: string; date: string; all: number; new28: number; m30: number; m90: number }
+const retentionSeriesCache = new Map<number, RetentionPoint[]>()
+export function retentionSeries(end: Date): RetentionPoint[] {
+  const endMs = end.getTime()
+  const hit = retentionSeriesCache.get(endMs)
+  if (hit) return hit
+  const rosterById = new Map(members.map(m => [m.id, m]))
+  const out: RetentionPoint[] = []
+  for (let i = 5; i >= 0; i--) {
+    const t = new Date(endMs - i * 30 * day)
+    const mid = t.getTime() - 30 * day
+    const prevStart = new Date(mid - 30 * day), prevEnd = new Date(mid)
+    const prev = activeIds(prevStart, prevEnd)
+    const cur = activeIds(prevEnd, t)
+    const denom = { all: 0, new28: 0, m30: 0, m90: 0 }, num = { all: 0, new28: 0, m30: 0, m90: 0 }
+    for (const id of prev) {
+      const m = rosterById.get(id)
+      if (!m || !presentAt(m, prevEnd)) continue
+      const tenure = mid - m.joinedAt.getTime()
+      const cohort: keyof typeof denom = tenure < 28 * day ? 'new28' : tenure < 90 * day ? 'm30' : tenure < 180 * day ? 'm90' : 'all'
+      denom.all++; if (cohort !== 'all') denom[cohort]++
+      if (cur.has(id)) { num.all++; if (cohort !== 'all') num[cohort]++ }
+    }
+    out.push({
+      label: monthNames[t.getMonth()],
+      date: `${monthNames[t.getMonth()]} ${t.getUTCDate()}, ${t.getUTCFullYear()}`,
+      all: denom.all ? num.all / denom.all * 100 : 0,
+      new28: denom.new28 ? num.new28 / denom.new28 * 100 : 0,
+      m30: denom.m30 ? num.m30 / denom.m30 * 100 : 0,
+      m90: denom.m90 ? num.m90 / denom.m90 * 100 : 0,
+    })
+  }
+  retentionSeriesCache.set(endMs, out)
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Weekly new-member activation
+// ---------------------------------------------------------------------------
+// The New member activation card plots the activation rate (joiners who were
+// still present and active within 7 days of joining) for each of the last five
+// calendar weeks, matching the card's "Aug 4 - 10" ... "Sep 1 - 7" labels.
+export interface ActivationPoint { label: string; date: string; rate: number }
+const activationSeriesCache = new Map<number, ActivationPoint[]>()
+export function activationSeries(end: Date): ActivationPoint[] {
+  const endMs = end.getTime()
+  const hit = activationSeriesCache.get(endMs)
+  if (hit) return hit
+  // Out from the Sunday that ends the week containing `end`, so the trailing
+  // bucket label always states a whole week (Sep 1 - 7 etc.).
+  const sunday = endMs - end.getUTCDay() * day
+  const out: ActivationPoint[] = []
+  for (let i = 0; i < 5; i++) {
+    const s = new Date(sunday + i * 7 * day), e = new Date(s.getTime() + 7 * day)
+    const joiners = members.filter(m => !m.bot && m.joinedAt.getTime() > s.getTime() && m.joinedAt.getTime() <= e.getTime())
+    const eligible = joiners.length
+    const activated = joiners.filter(m => { const w = new Date(m.joinedAt.getTime() + 7 * day); return presentAt(m, w) && isActive(m.id, m.joinedAt, w) }).length
+    const lastDay = new Date(e.getTime() - day)
+    const startLabel = `${monthNames[s.getUTCMonth()]} ${s.getUTCDate()}`
+    out.push({
+      label: lastDay.getUTCMonth() === s.getUTCMonth() ? `${startLabel} - ${lastDay.getUTCDate()}` : `${startLabel} - ${monthNames[lastDay.getUTCMonth()]} ${lastDay.getUTCDate()}`,
+      date: `${monthNames[s.getUTCMonth()]} ${s.getUTCDate()} – ${monthNames[lastDay.getUTCMonth()]} ${lastDay.getUTCDate()}, ${lastDay.getUTCFullYear()}`,
+      rate: eligible ? activated / eligible * 100 : 0,
+    })
+  }
+  activationSeriesCache.set(endMs, out)
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Members to watch
+// ---------------------------------------------------------------------------
+// The card surfaces five real members with a one-line signal of why they are
+// worth watching. Selection is deterministic and each blurb matches the
+// member's actual tier/activity so `watch` rows never contradict the People
+// page or their profile. Rule order is fixed; candidates are skipped once used.
+export interface MemberWatchRow { id: string; name: string; handle: string; tier: ActivityTier; blurb: string }
+const membersToWatchCache = new Map<number, MemberWatchRow[]>()
+export function membersToWatch(end: Date): MemberWatchRow[] {
+  const endMs = end.getTime()
+  const hit = membersToWatchCache.get(endMs)
+  if (hit) return hit
+  const cutoff = endMs - 28 * day
+  const snap = activitySnapshot(end, 28)
+  const pool = members.filter(m => !m.bot && presentAt(m, end)).map(m => {
+    const own = (messagesByMember.get(m.id) ?? []).filter(x => x.at.getTime() >= cutoff)
+    const s = snap.get(m.id)
+    return s && { m, tier: s.tier, activeDays: s.activeDays, breadth: unique(own.map(x => x.channelId)).size, lastActiveAtMs: s.lastActiveAtMs }
+  }).filter((c): c is { m: Member; tier: ActivityTier; activeDays: number; breadth: number; lastActiveAtMs: number } => c !== null)
+  const order = pool.sort((a, b) => b.activeDays - a.activeDays || b.m.joinedAt.getTime() - a.m.joinedAt.getTime() || a.m.id.localeCompare(b.m.id))
+  type Cand = (typeof order)[number]
+  const rules: [string, (c: Cand) => boolean][] = [
+    ['Became a contributor', c => c.tier === 'Contributor'],
+    ['Is active in more than 5 channels', c => c.breadth >= 5],
+    ['Moved from contributor to regular', c => c.tier === 'Regular' && c.activeDays >= 10],
+    ['No activity in 14 days', c => c.lastActiveAtMs <= endMs - 14 * day && c.activeDays >= 1],
+    ['Moved from lurker to regular', c => c.tier === 'Regular' && c.activeDays >= 5 && c.activeDays < 10],
+  ]
+  const fallback = (c: Cand): string => c.tier === 'Contributor' ? 'Became a contributor' : c.tier === 'Superuser' ? 'Keeps the community conversation moving' : c.breadth >= 5 ? 'Is active in more than 5 channels' : 'Active earlier this week'
+  const used = new Set<string>()
+  const rows: MemberWatchRow[] = []
+  const take = (c: Cand, blurb: string) => { used.add(c.m.id); rows.push({ id: c.m.id, name: c.m.name, handle: c.m.username ?? c.m.name.toLowerCase().replace(/[^a-z0-9]+/g, '.'), tier: c.tier, blurb }) }
+  for (const [blurb, pred] of rules) {
+    const c = order.find(x => !used.has(x.m.id) && pred(x))
+    if (!c) continue
+    take(c, blurb)
+  }
+  for (const c of order) { if (rows.length >= 5) break; if (!used.has(c.m.id)) take(c, fallback(c)) }
+  membersToWatchCache.set(endMs, rows)
+  return rows
+}
+
+// ---------------------------------------------------------------------------
+// Clock labels for peak windows ("7:00AM", "8:00PM")
+// ---------------------------------------------------------------------------
+export const clockLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}:00${h < 12 ? 'AM' : 'PM'}`

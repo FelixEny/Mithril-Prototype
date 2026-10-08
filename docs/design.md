@@ -118,6 +118,9 @@ System colors used for avatar tinting (initials circles, graph nodes, Dicebear b
 - Brand: `Color/Brand/200`
 - BrandMid: `Color/Brand/100`
 - BrandLight: `Color/Brand/50`
+- AreaFill: `#5926C8` (`--chart-area-fill`, gradient under the roster line; not in
+  the documented palette — the value comes from the Figma gradient)
+- Negative: `Color/Red/200` (`--chart-negative`, negative values such as left members)
 
 #### Heatmap (activity grid)
 - 1: `#CFFCE4`
@@ -225,7 +228,7 @@ Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS 
 | 16px | `--line-height-16`, `--letter-spacing-16` | `md` / card `title` |
 | 24px | `--line-height-24`, `--letter-spacing-24` | `Heading/sm`, stat values |
 | 28px | `--line-height-28`, `--letter-spacing-28` | `Heading/lg`, page titles |
-| 36px | `--line-height-36`, `--letter-spacing-36` | lead story (`.lead-story`) |
+| 40px | `--line-height-40`, `--letter-spacing-40` | lead story (`.lead-story`) |
 
 ### The one exception: 16px
 
@@ -242,7 +245,7 @@ Both are declared where used; the generic `h3` rule takes `--line-height-16-titl
 Most steps use a single weight, but every size may carry any of the four:
 
 - 10px Regular · 12px Regular/Medium/Semibold · 14px Regular/Medium/Semibold
-- 16px Medium/Semibold · 24px Medium/Semibold · 28px Semibold/Bold · 36px Medium/Semibold
+- 16px Medium/Semibold · 24px Medium/Semibold · 28px Semibold/Bold · 36px Medium/Semibold · 40px Medium
 
 Two deliberate departures from a plain Semibold-heading reading:
 
@@ -256,25 +259,21 @@ Two deliberate departures from a plain Semibold-heading reading:
     a separate node — `aria-hidden`, since the four bands are already stated in
     words. A wrapper with no size of its own would only inherit the 24px and
     change nothing.
-- The **Overview lead story** is 36px at `--font-weight-medium`, with Semibold
-  reserved for its `<strong>` figure runs — Medium for the connective grammar,
-  Semibold for the numbers the sentence is holding up. Its `max-width` is `56ch`,
-  which is the content column itself rather than a typographic limit: `main` caps
-  at `1440px`, minus its `250px` sidebar margin and `48px`/`24px` padding, leaves
-  `1368px`, and `1ch` resolves to `24.228px` at 36px Geist Medium with
-  `--letter-spacing-36` applied — `56ch` = `1357px`, 11px inside the column.
-  Raising it past `56ch` changes nothing at any viewport, because the parent
-  stops it first.
+- The **Overview lead story** is 40px at `--font-weight-medium`, with its
+  load-bearing figure runs in `--content-primary` and the connective grammar in
+  `--content-secondary` — the design's `{ts3}`/`{ts2}` records. The emphasis is
+  colour at a single weight, not a second weight. Its `max-width` is `924px`,
+  which is **Figma's lead-story text box** (`#963:55476`) taken verbatim — not a
+  `ch` figure and not the content column. The measure binds at this size: at 40px
+  Geist Medium `1ch` is `≈26.9px`, so the box is `≈34ch`, and even the single-clause
+  story exceeds `924px` of ink, so every story wraps to two lines and
+  `text-wrap: balance` holds them near-equal.
 
-  The measure is a ceiling the copy never reaches, not a lever on line length.
-  Measured live, the single-clause story is `932px` of ink and the two-clause one
-  `1606px` against a `1357px` box, so the short form is one line at *any* measure
-  from `40ch` up, and the long form needs `66ch` to become one line — past the
-  ceiling, so it stays two. `text-wrap: balance` then holds the long form's two
-  lines near-equal at roughly `798px` each regardless of the measure. Widening the
-  box therefore changes no line break and no ink width; it only stops the rule from
-  describing a narrower column than the one it sits in. Below a `1533px` viewport
-  the parent is already under `1211px` and the value does not bind at all.
+  The measure is a ceiling the copy always reaches, not a lever on line count:
+  any candidate box narrower than the ink still yields two balanced lines, and
+  widening `924px` does not make the long form a single line — the short form
+  alone needs more than `924px` of ink at 40px. Break decisions come from the
+  copy, not the box.
 - `.bench h2` (BenchmarkPage) is 28px **Bold** — the only Bold text in the app.
 
 ### Historical note

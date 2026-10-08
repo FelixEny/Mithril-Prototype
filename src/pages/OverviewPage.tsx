@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Gauge, Hash, Lightning, SpeakerHigh } from '@phosphor-icons/react'
 import { dashboard, dashboardWindow, formatNumber } from '../analytics'
 import { relationships } from '../relationships'
@@ -10,8 +10,8 @@ import { Card } from '../components/Card'
 import { CardTitle } from '../components/CardTitle'
 import { CommunityInsight } from '../components/CommunityInsight'
 import { DateRangePicker } from '../components/DateRangePicker'
+import { MetricsCard } from '../components/MetricsCard'
 import { PageHeader } from '../components/PageHeader'
-import { Stat } from '../components/Stat'
 import { strengthDimensions, StrengthCard } from '../components/StrengthCard'
 import { strengthSnapshot, STRENGTH_BASIS_DAYS } from '../relationships'
 import { TierDonut } from '../components/TierDonut'
@@ -19,6 +19,7 @@ import type { PageKey } from '../components/Sidebar'
 import { greeting, overviewStory } from '../overview'
 import { overviewInsights } from '../overview-insights'
 import { buildMithrilFeed, type FeedIcon } from '../overview-feed'
+import { CommunitySnapshotPage } from './CommunitySnapshotPage'
 import type { RangeProps } from './EngagementPage'
 
 const DAY = 86400000
@@ -29,24 +30,29 @@ const FEED_ICONS: Record<FeedIcon, typeof Gauge> = { gauge: Gauge, speaker: Spea
 // about the date range, and the insight links are the only thing on this page that
 // navigates, so the other four pages should not have to accept the prop.
 export function OverviewPage({ range, custom, onSelectPreset, onSelectRange, onNavigate }: RangeProps & { onNavigate: (page: PageKey) => void }) {
+  const [snapshot, setSnapshot] = useState(false)
   const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / DAY)) : range
 
   const { w, rel, strength, story, insights, feed } = useMemo(() => {
     const w = custom ? dashboardWindow(custom.from, custom.to) : dashboard(range)
-    const rel = relationships(w.start.getTime(), w.end.getTime())
+    // Deliberately its own fixed basis window rather than `w`: the insights, the
+    // feed and the strength score all read best at one length, so the picker's
+    // length must not reach them. Only a custom end date moves them, which is a
+    // real equal-length comparison.
+    const basis = dashboardWindow(new Date(w.end.getTime() - STRENGTH_BASIS_DAYS * DAY), w.end)
+    const rel = relationships(basis.start.getTime(), basis.end.getTime())
     return {
       w,
       rel,
-      // Deliberately its own fixed basis window rather than `w`: the score is
-      // calibrated for one length, so the picker's length must not reach it. Only
-      // a custom end date moves it, which is a real equal-length comparison.
+      // On the same fixed basis: the score is calibrated for one length, so the
+      // picker's length must not reach the gauge either.
       strength: strengthSnapshot(w.end.getTime()),
       story: overviewStory(w),
-      insights: overviewInsights(w),
-      // The network engine is already running for the strength card directly above,
-      // so the connectedness figure the feed quotes is read off that same result
-      // rather than costing a second pass.
-      feed: buildMithrilFeed(w, { count: rel.connectedCount, total: w.totalMembers }),
+      insights: overviewInsights(basis),
+      // The network engine is already running for the `basis` window (the same
+      // window the strength card reads), so the connectedness figure the feed
+      // quotes is read off that same result rather than costing a second pass.
+      feed: buildMithrilFeed(basis, { count: rel.connectedCount, total: basis.totalMembers }),
     }
   }, [range, custom])
 
@@ -54,29 +60,33 @@ export function OverviewPage({ range, custom, onSelectPreset, onSelectRange, onN
   // that stays for the session rather than ticking over while the page is open.
   const h = greeting(new Date())
 
+  if (snapshot) return <CommunitySnapshotPage w={w} effDays={effDays} range={range} custom={custom} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} onBack={() => setSnapshot(false)} />
+
   return <>
     <PageHeader title={<>{h.text}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange}/>}/>
     <p className="lead-story">{story.runs.map((r, i) => r.strong ? <strong key={i}>{r.text}</strong> : <span key={i}>{r.text}</span>)}</p>
-    <div className="core-grid">
-      {/* `footer` is `Stat`'s optional supporting line. Each footer states a ratio, so
-          the figure under the value is a different one from the headline rather
-          than a restatement of it. The period-over-period comparison is left to the
-          `Change` chip beside the value, not repeated here. */}
-      <Card className="detail"><Stat label="Total members" info={metricInfo['Total members']} value={formatNumber(w.totalMembers)} change={{ v: w.delta.totalMembers, range: effDays }} footer={<><b>{formatNumber(w.joined)}</b> of <b>{formatNumber(w.roster.inWindow)}</b> members joined during this period.</>}/></Card>
-      <Card className="detail"><Stat label="Active members" info={metricInfo['Active members']} value={formatNumber(w.current.active)} change={{ v: w.delta.active, range: effDays }} footer={<><b>{Math.round(w.current.activeRate)}%</b> of <b>{formatNumber(w.roster.inWindow)}</b> members participated in the last {effDays} day period.</>}/></Card>
-      <Card className="detail"><Stat label="New members" info={metricInfo['New members']} value={formatNumber(w.joined)} change={{ v: w.delta.joined, range: effDays }} footer={<><b>{formatNumber(w.activation.activated)}</b> of <b>{formatNumber(w.activation.eligible)}</b> new members activated within 7 days.</>}/></Card>
-      <Card className="detail"><Stat label="Server leaves" info={metricInfo['Members who left']} value={formatNumber(w.left)} change={{ v: w.delta.left, range: effDays, invert: true }} footer={<><b>{formatNumber(w.left)}</b> of <b>{formatNumber(w.roster.inWindow)}</b> members present during this period left the server.</>}/></Card>
-    </div>
-    <StrengthCard score={Math.round(strength.strength)} delta={strength.strengthDelta} range={STRENGTH_BASIS_DAYS} dimensions={strengthDimensions(strength)} showFoot={false}/>
+    {/* The four metrics sit in one card as columns divided by a hairline rather
+        than as four cards: the period-over-period `Change` chip beside each value
+        is the whole comparison, so nothing is lost by dropping the supporting
+        lines the four-card version carried. "View chart" drills into the
+        Community snapshot page, which plots the roster and the membership flow
+        across this same range. */}
+    <MetricsCard title="Community snapshot" link="View chart" onClick={() => setSnapshot(true)} stats={[
+      { label: 'Total members', value: formatNumber(w.totalMembers), change: { v: w.delta.totalMembers, range: effDays } },
+      { label: 'Active members', info: metricInfo['Active members'], value: formatNumber(w.current.active), change: { v: w.delta.active, range: effDays } },
+      { label: 'New members', value: formatNumber(w.joined), change: { v: w.delta.joined, range: effDays } },
+      { label: 'Server leaves', value: formatNumber(w.left), change: { v: w.delta.left, range: effDays, invert: true } },
+    ]}/>
     <Card className="insights-card">
-      <CardTitle title="Community insights"/>
+      <CardTitle className="metrics-title" title="Community insights" meta="Trailing 28 days"/>
       <div className="insights-panel"><div className="insights-grid">
         {insights.map((i) => <CommunityInsight key={i.id} {...i} onNavigate={onNavigate}/>)}
       </div></div>
     </Card>
+    <StrengthCard score={Math.round(strength.strength)} delta={strength.strengthDelta} range={STRENGTH_BASIS_DAYS} dimensions={strengthDimensions(strength)} showFoot={false}/>
     <div className="bottom-grid">
       <Card><CardTitle title="Activity tier distribution" meta="Trailing 28 days"/><TierDonut tiers={w.tiers}/></Card>
-      <Card><CardTitle title="Mithril feed"/><div className="feed">
+      <Card><CardTitle title="Mithril feed" meta="Trailing 28 days"/><div className="feed">
         {feed.map((f) => { const Icon = FEED_ICONS[f.icon]; return <div className="feed-row" key={f.id}>
           <span className="feed-icon"><Icon size={20}/></span>
           <div className="feed-body">

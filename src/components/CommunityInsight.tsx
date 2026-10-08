@@ -1,7 +1,8 @@
-import { ArrowRight, Sparkle } from '@phosphor-icons/react'
+import { Sparkle } from '@phosphor-icons/react'
 import type { InsightTone } from '../overview-insights'
 import { InsightChip } from './InsightChip'
 import type { PageKey } from './Sidebar'
+import { TextLink } from './TextLink'
 
 // One of the four columns in the Overview's Community insights card, mirroring the
 // Figma `Insights` component. Three stacked parts:
@@ -41,6 +42,6 @@ export function CommunityInsight({ tone, label, title, detail, recommendation, l
         `navigate` so the hash stays canonical. See OverviewPage's `onNavigate`.
         A sibling of the tinted block, not a child of it: Figma stacks the
         recommendation box and the link as separate items in the column. */}
-    <button type="button" className="insight-link" onClick={() => onNavigate(link)}>{linkLabel}<ArrowRight size={16}/></button>
+    <TextLink onClick={() => onNavigate(link)}>{linkLabel}</TextLink>
   </div>
 }

@@ -25,16 +25,18 @@ const subtitles: Record<PageKey, string> = {
   People: 'Find and understand members of your community',
 }
 
-// Minimal hash routing: the app's default page is Engagement, but a fragment
-// (#/relationships, #/people, ...) selects the initial page so the graph can be
-// smoke-tested headlessly and deep-linked. #/bench (and #/bench/all) mounts the
-// performance bench page directly, outside the sidebar layout.
+// Minimal hash routing: the app's default page is Overview, but a fragment
+// (#/engagement, #/relationships, #/people, ...) selects the initial page so
+// individual pages can be smoke-tested headlessly and deep-linked. #/bench (and
+// #/bench/all) mounts the performance bench page directly, outside the sidebar
+// layout.
 const hashPage = (): PageKey => {
   const h = window.location.hash.replace(/^#\/?/, '').toLowerCase()
   if (h === 'relationships') return 'Relationships'
   if (h === 'people') return 'People'
   if (h === 'overview') return 'Overview'
-  return 'Engagement'
+  if (h === 'engagement') return 'Engagement'
+  return 'Overview'
 }
 
 const isBench = () => window.location.hash.startsWith('#/bench')

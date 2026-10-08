@@ -14,13 +14,13 @@ the channel and discussion tables (Engagement).
 
 ## 2. Structure
 
-Top to bottom, in Figma v1 order (`947:53781`):
+Top to bottom, in Figma order (`963:55427`):
 
 1. Greeting and date range picker (`PageHeader`)
 2. Lead story
-3. Four membership stat cards
-4. Community strength
-5. Community insights (four columns)
+3. Community snapshot (one card, four metric columns)
+4. Community insights (four columns, grey card)
+5. Community strength
 6. Activity tier distribution and Mithril feed
 
 ## 3. Greeting
@@ -58,17 +58,15 @@ the design rather than rendering it.
 
 ## 4. Lead story
 
-One sentence at 36px Medium, with a 24px (`--space-2xl`) bottom margin. Its
-load-bearing figures are set in `--content-primary` at Semibold while the
-connective grammar stays in `--content-secondary` Medium. `overviewStory()`
-returns an array of runs rather than a string precisely so that emphasis can land
-on the numbers. The `56ch` measure is the content column itself — `main` caps at
-`1440px` and its sidebar margin plus padding leave `1368px` — so the lead story is
-never held narrower than the grid it sits in. It does not lengthen the sentence:
-the single-clause story measures `932px` of ink and the two-clause one `1606px`
-against a `1357px` box, and `text-wrap: balance` keeps the long form's two lines
-near-equal, so no value of the measure changes a line break. See `design.md` for
-the full measurement.
+One sentence at 40px Medium on a `924px` measure (`max-width`), with a 24px
+(`--space-2xl`) bottom margin. The measure is Figma's lead-story text box
+(`#963:55476`), not a `ch` figure; `text-wrap: balance` keeps the two-clause
+form's two lines near-equal. Its load-bearing figures are set in
+`--content-primary` while the connective grammar stays in `--content-secondary`,
+both at the same Medium weight — the same `{ts2}` (`#6B7280`) / `{ts3}`
+(`#111928`) colour runs the design uses. `overviewStory()` returns an array of
+runs rather than a string precisely so that emphasis can land on the numbers. See
+`design.md` for the type scale.
 
 Membership direction leads, because it is the only thing on this screen that
 changes hands.
@@ -77,69 +75,30 @@ The second clause appears **only when retention moves against membership**. When
 the two agree, restating it is noise; when they disagree, the contradiction is the
 most useful sentence on the page. Half a point is treated as no movement.
 
-## 5. Membership stat cards
+## 5. Community snapshot
 
-Four cards, each with a sparkline:
+One card with a `View chart` link (to the Community snapshot page, see
+`community-snapshot.md`) in its title and four
+metric columns divided by hairlines, each holding a label, a 24px value and a
+`Change` chip. There is no supporting line under the value: the
+period-over-period comparison is entirely the chip, matching the design.
 
-| Card | Value | Change | Sparkline | Series |
-| --- | --- | --- | --- | --- |
-| Total members | `totalMembers` (roster as of `end`) | `delta.totalMembers` | area | `roster` |
-| Active members | `current.active` | `delta.active` | area | `active` |
-| New members | `joined` | `delta.joined` | bars | `joined` |
-| Server leaves | `left` | `delta.left`, `invert` | bars | `left` |
+| Metric | Value | Change |
+| --- | --- | --- |
+| Total members | `totalMembers` (roster as of `end`) | `delta.totalMembers` |
+| Active members | `current.active` | `delta.active` |
+| New members | `joined` | `delta.joined` |
+| Server leaves | `left` | `delta.left`, `invert` |
 
-All four deltas are percentages against the equally-long prior window, computed by
-`dashboardWindow` from the roster at the window's start (not today's roster) and
-the prior window's joins and leaves.
+Only Active members carries the info tooltip (`metricInfo['Active members']`), as
+in Figma. All four deltas are percentages against the equally-long prior window,
+computed by `dashboardWindow` from the roster at the window's start (not today's
+roster) and the prior window's joins and leaves.
 
-Server leaves is the only card with `invert`: its arrow direction tracks the raw
+Server leaves is the only metric with `invert`: its arrow direction tracks the raw
 number while its colour tracks goodness, so a drop in departures reads as a
 downward green-neutral arrow rather than a downward red one. This behaviour is
 intentional.
-
-### Area vs bars
-
-The chart type follows the series, not the card:
-
-- **Level series** (`roster`, `active`) use `SparkArea`, because a level series needs
-  its *slope*. Bars are sized against the tallest bar in the run, and the roster only
-  moves 2379 → 2507 across the longest window — under bars every bar lands within ~2px of the
-  tallest, so the chart is a solid block that reports nothing.
-- **Flow series** (`joined`, `left`) stay on `SparkBars`, because a bar length means
-  "this many happened in this bucket". An area would imply continuity between
-  discrete daily events that isn't there.
-
-`SparkArea`'s domain is the series' own `[min, max]`, **not zero**. This is the one
-deliberate departure from the zero-baseline rule, so it is worth recording: in a bar
-chart the *length* is the encoding, so the baseline must be zero for the length to
-mean anything. In an area chart the encoding is the shape of the top edge, and
-against zero a 5% roster change is a line sitting at 95% of full height for the whole
-run — the same dead chart in different clothes. The slope stays proportional; only the
-vertical offset is chosen to use the box. Do not "correct" this to a zero baseline.
-
-`SparkArea` also carries `vector-effect="non-scaling-stroke"` because the viewBox is
-stretched non-uniformly to fill the card; without it the 1.5px line renders up to
-~2.5× thicker horizontally than vertically.
-
-### Sparkline construction
-
-`overviewSparkBars(w)` calls `membershipSeries(start, end)`, which emits one
-point per day across the **full** window (no 30-day cap, unlike
-`DashboardWindow.series`):
-
-- The level series (`roster`, `active`) are point-in-time counts at each bucket's
-  close.
-- The flow series (`joined`, `left`) are per-bucket intervals using `(start, end]`,
-  which is the same half-open convention as `w.joined` / `w.left`, so the bucket
-  sums reconcile exactly with the stat cards.
-
-Longer windows are resampled to `SPARK_BUCKETS` (28). Levels are **averaged** and
-flows are **summed**: averaging joins would invent fractional members per day, and
-summing a roster would report the window over and over.
-
-An 84-day (12-week) window therefore still draws 28 points at the same weight as a 28-day one,
-and the flow bars stay proportional to the totals the card above them reports. A
-7-day window yields fewer than 28 points, so its area is correspondingly more angular.
 
 ## 6. Community strength
 
@@ -252,7 +211,7 @@ Relationship Quality =
 
 ## 7. Community insights
 
-Four columns from `overviewInsights(w)`, rendered by
+Four columns from `overviewInsights(basis)`, rendered by
 `src/components/CommunityInsight.tsx`. Each column stacks three parts, matching the
 Figma `Insights` component:
 
@@ -305,6 +264,16 @@ The Notable column is worded against the trailing 28 days, because
 recomputed for the selected window. It must never be described as a movement over
 the selected period.
 
+### Basis window
+
+Every column is pinned to a fixed **trailing 28-day** basis rather than the
+picker's length, in the same way the strength card below is. `OverviewPage`
+builds it as `dashboardWindow(end − 28d, end)` off the selection's end date
+(`STRENGTH_BASIS_DAYS`), so switching 7d → 84d leaves all four columns
+byte-identical and a custom **end date** moves them as a real equal-length
+comparison. The detail sentences' "against X% in the previous `days`" therefore
+always reads the previous 28 days, and the comparative deltas are 28d-vs-prior-28d.
+
 ### Navigation
 
 Each column links to the page that goes deeper on its question: the three rate
@@ -323,17 +292,20 @@ is why `PageKey` is imported type-only into `overview-insights.ts`.
 The shared `TierDonut` component, identical to the Engagement page's. Hovering a
 slice or a legend row isolates that tier in the centre total.
 
-The card is a flex column (`min-height:360px`), so `.participation`'s existing
-`flex:1` absorbs the slack the fixed radii leave behind and the donut-plus-legend
-block sits vertically centred. Recharts centres the fixed-radius pie in the
-taller viewport on its own, and the `.total` overlay (`inset:0`) stays glued to
-it; the legend rows were already `justify-content:center`. The feed card in the
-same grid is unaffected — `.feed` has no `flex:1`, so it keeps stacking from the
-top exactly as before.
+The card is a flex column (`min-height:360px`), so `.participation`'s `flex:1`
+absorbs the slack the fixed radii leave behind and the donut-plus-legend pair
+sits vertically centred — and, with `justify-content:center`, horizontally
+centred too. The donut box hugs the fixed-radius pie (`width:218px` against
+186px of ink) instead of stretching to half the card, so the whitespace lands
+roughly equally on both sides rather than pooling left of the pie. Recharts
+centres the pie in its box on its own, and the `.total` overlay (`inset:0`)
+stays glued to it; the legend keeps its 50% column (capped at `340px`) with
+`justify-content:center` rows. The feed card in the same grid is unaffected —
+`.feed` has no `flex:1`, so it keeps stacking from the top exactly as before.
 
 ## 9. Mithril feed
 
-Four digest rows from `buildMithrilFeed(w, connected)`. The four signals are
+Four digest rows from `buildMithrilFeed(basis, connected)`. The four signals are
 chosen to be *different from each other* and different from the cards directly
 above, because the feed sits in the most prominent remaining position on the page:
 
@@ -345,10 +317,16 @@ above, because the feed sits in the most prominent remaining position on the pag
 | Hash | Most active channel | `channelRows[0]` |
 
 `connected` is passed in rather than derived inside the feed module: the network
-engine is by far the most expensive call on the page, and the Overview already
-runs it for the strength card directly above, so the figure is read off that same
-result. `relationships()` is cached by window, so the Relationships page pays for
-it once too.
+engine is by far the most expensive call on the page, and the feed reads it off
+the same fixed 28-day `basis` window the strength card directly above uses
+(`relationships(basis)`, cached by window), so the figure and the gauge never
+disagree about the period. `relationships()` is cached by window, so the
+Relationships page pays for it once too.
+
+Like the insights and the strength card, the feed is pinned to that fixed
+trailing-28-day basis: all four rows are 28-day aggregates (`peaks`,
+`discussionRows`, `channelRows`, connectedness), so switching 7d → 84d leaves the
+feed byte-identical and only a custom end date moves it.
 
 ### Row structure
 
@@ -377,8 +355,8 @@ Ours is computed from the corpus, so the numbers and phrasing differ by design.
 
 ## 10. Metric relationships and non-duplication rules
 
-- Lead story membership figures and the Total members card are the same number.
-  The story states movement; the card states the level.
+- Lead story membership figures and the Total members metric are the same number.
+  The story states movement; the metric states the level.
 - New members and Server leaves are absolute counts for the selected window. Their
   change chips compare against the prior window and are not derived from the
   story.
