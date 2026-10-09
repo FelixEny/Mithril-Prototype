@@ -39,6 +39,11 @@ multiple values can be combined (e.g. Superuser + Contributor at once).
 
 - Activity level filter → table shows members whose tier is in the selection.
 - Roles filter → table shows members holding any selected role.
+- Role Count filter → table shows members whose number of assigned roles matches
+  the chosen comparison (**Exactly** / **More than** / **At least** / **Fewer
+  than** / **At most** N). Duplicates count once and the default `@everyone`
+  role is excluded. Independent of the Roles filter; combined with it (and every
+  other filter) using the standard AND semantics.
 - Influence score filter → table shows members scoring at or above the chosen minimum (trailing 28-day Influence Score).
 - Segments filter → table shows the segment's current membership (see §4).
 
@@ -75,8 +80,9 @@ A segment is a saved filtered list. There are two creation flows:
 
 `archetypes`, `roles` (any-match), `activityTier` (trailing 28d),
 `activeWithinDays`, `minMessagesWithinDays`, `joinedWithinDays`,
-`joinedBeforeDays`. All days-based criteria are relative to the evaluation
-`asOf` date.
+`joinedBeforeDays`, `roleCount` (`{ op, value }`, compared against the member's
+unique non-`@everyone` role count). All days-based criteria are relative to the
+evaluation `asOf` date.
 
 ### Seed segments
 
@@ -123,19 +129,31 @@ their size varies with behaviour, not with the query window.
 
 Clicking a member's name in the People table opens a dedicated profile screen
 (`MemberProfilePage`, model in `member-profile.ts`). It draws on the same shared
-corpus as the table, so the name, `@username`, tier, roles, Influence score and
+corpus as the table, so the name, username, tier, roles, Influence score and
 avatar read identically on both surfaces.
 
 ### Layout
 
-- **Breadcrumb:** `People / <name>` replaces the page header; back returns to the
-  People list with the prior table state preserved.
-- **Hero:** 88px avatar, display name + `@username`, activity tier pill, all role
-  pills (dot + name), and a meta line of Joined, First active, Last active
-  (relative "N days ago" / "Today").
-- **Stat cards (4-across):** Influence score, Active days, Messages, Voice sessions.
-- **Charts (2-up):** Activity over time (messages + reactions per day) and Most
-  active channels (top 5 by messages with bars).
+A two-column layout under the page header:
+
+- **Page header:** breadcrumb `People / <name>` replaces the page title; back
+  returns to the People list with the prior table state preserved. The date
+  range picker sits on the right.
+- **Left — profile card (266px):** 80px avatar with the Influence score badge
+  (Fire icon + score) beside it; display name, username, activity tier pill;
+  an `ACTIVITY` section with Joined and Last active (relative "N days ago" /
+  "Today"); and a `DISCORD ROLES` section with the member's role pills.
+- **Right column:**
+  - **Engagement depth (metrics card):** Active days (`active/total`), Messages
+    and Voice sessions, each with an info tooltip. Active days and Messages
+    show period-over-period change chips; Voice sessions does not.
+  - **Activity over time:** messages + reactions per day as a two-line chart
+    with a legend.
+  - **Favourite channels:** the member's top 5 channels by messages as a ranked
+    list (rank, channel tag, message count).
+  - **Explore connections card:** "Explore `<first name>`'s connections" with a
+    call-to-action that navigates to the Relationships page with the member
+    selected and the graph flown to them.
 
 ### Period scoping
 
@@ -145,12 +163,11 @@ window starts at the picker's selected start and always ends at the data end
 
 - **Influence score stays pinned to the shared trailing-28-day engine**
   (`influenceEngine()`), the same score as the People table, Top influencers card
-  and relationship popup — it does not move with the picker. Its delta compares
-  the two adjacent 28-day windows ending at the data end.
-- **Active days, Messages, Voice sessions, the activity chart and Most active
+  and relationship popup — it does not move with the picker.
+- **Active days, Messages, Voice sessions, the activity chart and Favourite
   channels are picker-scoped.** Their deltas compare against the immediately
   preceding window of equal length.
-- No messages in the period renders Most active channels as an empty state
+- No messages in the period renders Favourite channels as an empty state
   ("No activity this period").
 
 ## 7. Do not

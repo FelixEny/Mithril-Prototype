@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CaretDown, CaretLeft, CaretRight, CaretUp, CaretUpDown, Check, DownloadSimple, Fire, FunnelSimple, Gauge, Lightning, MagnifyingGlass, Minus, Plus, SquaresFour, Tag, X } from '@phosphor-icons/react'
+import { ArrowDown, ArrowUp, CaretDown, CaretLeft, CaretRight, CaretUp, CaretUpDown, Check, DownloadSimple, Fire, FunnelSimple, Gauge, Lightning, ListNumbers, MagnifyingGlass, Minus, Plus, SquaresFour, Tag, X } from '@phosphor-icons/react'
 import { PageHeader } from '../components/PageHeader'
 
 import { Avatar } from '../components/Avatar'
@@ -13,6 +13,7 @@ import { TierPill } from '../components/TierPill'
 import { MemberProfilePage } from './MemberProfilePage'
 import { SegmentActionsBar } from '../components/SegmentActionsBar'
 import { Button } from '../components/Button'
+import { applyPeopleFilters, ROLE_COUNT_OPS, type RoleCountOp } from '../people-filters'
 import { useToast } from '../toast'
 import type { RangeProps } from './EngagementPage'
 
@@ -40,10 +41,16 @@ function Sparkline({ series }: { series: number[] }) {
 
 const joinFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
-export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: RangeProps) {
+export function PeoplePage({ range, custom, onSelectPreset, onSelectRange, peopleWatch, onClearWatch, onExploreMember }: RangeProps & { onExploreMember?: (memberId: string) => void }) {
   const rows = useMemo(() => peopleRows(), [])
   const endMs = endDate.getTime()
   const toast = useToast()
+  const watch = peopleWatch && peopleWatch.length > 0 ? peopleWatch : null
+  const watchMap = useMemo(() => new Map(watch?.map((w) => [w.id, w] as const) ?? []), [watch])
+  useEffect(() => {
+    if (!watch) return
+    setSearch(''); setTiers([]); setRoleSel([]); setMinInf(null); setRcDraft(''); setSegmentId('all'); setPage(1); setSub(null)
+  }, [watch])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -52,6 +59,10 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
   const [tiers, setTiers] = useState<ActivityTier[]>([])
   const [roleSel, setRoleSel] = useState<string[]>([])
   const [minInf, setMinInf] = useState<number | null>(null)
+  // Role Count: empty input = filter off, so "Exactly 0" is expressible by
+  // typing 0 (which would be impossible if 0 were the inactive sentinel).
+  const [rcOp, setRcOp] = useState<RoleCountOp>('at-least')
+  const [rcDraft, setRcDraft] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [perPage, setPerPage] = useState(10)
@@ -64,8 +75,10 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
   const smartInputRef = useRef<HTMLInputElement>(null)
 
   const [filterOpen, setFilterOpen] = useState(false)
-  const [sub, setSub] = useState<null | 'tier' | 'roles' | 'influence'>(null)
+  const [sub, setSub] = useState<null | 'tier' | 'roles' | 'rolecount' | 'influence'>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+  const [rcOpOpen, setRcOpOpen] = useState(false)
+  const rcOpRef = useRef<HTMLDivElement>(null)
   const [selOpen, setSelOpen] = useState(false)
   const selRef = useRef<HTMLDivElement>(null)
   const [ppOpen, setPpOpen] = useState(false)
@@ -77,6 +90,12 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [filterOpen])
+  useEffect(() => {
+    if (!rcOpOpen) return
+    const close = (e: MouseEvent) => { if (rcOpRef.current && !rcOpRef.current.contains(e.target as Node)) setRcOpOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [rcOpOpen])
   useEffect(() => {
     if (!selOpen && !ppOpen) return
     const close = (e: MouseEvent) => {
@@ -101,20 +120,18 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
   const editableSegs = useMemo(() => userSegments().filter((s) => s.kind === 'static'), [])
   const selRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const segIds = seg ? new Set(segmentMembership(seg)) : null
-    const out: PeopleRow[] = []
-    for (const r of rows) {
-      if (segIds && !segIds.has(r.id)) continue
-      if (tiers.length && !tiers.includes(r.tier)) continue
-      if (roleSel.length && !r.roleIds.some((id) => roleSel.includes(id))) continue
-      if (minInf !== null && r.influence < minInf) continue
-      if (q && !(r.name.toLowerCase().includes(q) || (r.username ?? '').toLowerCase().includes(q))) continue
-      out.push(r)
-    }
-    return out
-  }, [rows, search, seg, tiers, roleSel, minInf])
+  const roleCount = rcDraft === '' ? null : { op: rcOp, value: Math.max(0, parseInt(rcDraft, 10) || 0) }
+  const rcOpLabel = ROLE_COUNT_OPS.find((o) => o.value === rcOp)?.label ?? 'At least'
+
+  const filtered = useMemo(() => applyPeopleFilters(rows, {
+    search,
+    segIds: seg ? new Set(segmentMembership(seg)) : null,
+    watchIds: watch ? watchMap : null,
+    tiers,
+    roleSel,
+    minInf,
+    roleCount,
+  }), [rows, search, seg, tiers, roleSel, minInf, roleCount, watch, watchMap])
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
@@ -131,11 +148,24 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
     return arr
   }, [filtered, sortKey, sortDir])
 
+  const ordered = useMemo(() => {
+    if (!watch) return null
+    const byId = new Map(filtered.map((r) => [r.id, r]))
+    const out: PeopleRow[] = []
+    for (const w of watch) {
+      const r = byId.get(w.id)
+      if (r) out.push(r)
+    }
+    return out
+  }, [watch, filtered])
+
   const total = sorted.length
   const pages = Math.max(1, Math.ceil(total / perPage))
   const cur = Math.min(page, pages)
   useEffect(() => { if (page > pages) setPage(pages) }, [page, pages])
   const slice = sorted.slice((cur - 1) * perPage, cur * perPage)
+  const showWatch = watch !== null
+  const visibleRows = showWatch && ordered ? ordered : slice
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -145,17 +175,21 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
   const toggleTier = (t: ActivityTier) => setTiers((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
   const toggleRole = (id: string) => setRoleSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
   const clampInf = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
-  const clearFilters = () => { setTiers([]); setRoleSel([]); setMinInf(null); setSub(null) }
+  const clearFilters = () => { setTiers([]); setRoleSel([]); setMinInf(null); setRcDraft(''); setRcOpOpen(false); setSub(null) }
 
   const applyInf = (n: number) => { const v = clampInf(n); setMinInf(v > 0 ? v : null); setDraft(String(v)) }
+  // Role count accepts non-negative whole numbers only; digits are stripped
+  // on input so the derived value is always a safe integer.
+  const onRoleCountInput = (raw: string) => setRcDraft(raw.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, ''))
+  const stepRoleCount = (delta: number) => setRcDraft(String(Math.max(0, (rcDraft === '' ? 0 : parseInt(rcDraft, 10)) + delta)))
 
-  const allPageSel = slice.length > 0 && slice.every((r) => selected.has(r.id))
-  const somePageSel = slice.some((r) => selected.has(r.id))
+  const allPageSel = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id))
+  const somePageSel = visibleRows.some((r) => selected.has(r.id))
   const toggleAll = () => {
     setSelected((prev) => {
       const nx = new Set(prev)
-      if (allPageSel) slice.forEach((r) => nx.delete(r.id))
-      else slice.forEach((r) => nx.add(r.id))
+      if (allPageSel) visibleRows.forEach((r) => nx.delete(r.id))
+      else visibleRows.forEach((r) => nx.add(r.id))
       return nx
     })
   }
@@ -207,6 +241,7 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
       ...(tiers.length ? { activityTier: [...tiers] } : {}),
       ...(roleSel.length ? { roles: [...roleSel] } : {}),
       ...(minInf !== null ? { minInfluence: minInf } : {}),
+      ...(roleCount ? { roleCount: { ...roleCount } } : {}),
     }
     const n = smartName.trim() || 'Smart segment'
     setSmartOpen(false)
@@ -232,12 +267,12 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
     return items
   }, [pages, cur])
 
-  const activeFilterCount = tiers.length + roleSel.length + (minInf !== null ? 1 : 0)
+  const activeFilterCount = tiers.length + roleSel.length + (minInf !== null ? 1 : 0) + (roleCount ? 1 : 0)
   const rangeStart = total === 0 ? 0 : (cur - 1) * perPage + 1
   const rangeEnd = Math.min(total, cur * perPage)
 
   return selectedId ? (
-    <MemberProfilePage memberId={selectedId} onBack={() => setSelectedId(null)} range={range} custom={custom} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />
+    <MemberProfilePage memberId={selectedId} onBack={() => setSelectedId(null)} onExplore={onExploreMember ? () => onExploreMember(selectedId) : undefined} range={range} custom={custom} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />
   ) : <>
     <PageHeader title="People" subtitle="Find and understand members of your community" action={
       <div className="ph-actions">
@@ -293,6 +328,29 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
                 ))}
               </div>}
             </div>
+            <div className="menu-sub-row" onMouseEnter={() => { setSub('rolecount'); setRcOpOpen(false) }}>
+              <i className="menu-sub-icon"><ListNumbers size={16} /></i><span className="menu-label">Role Count</span><CaretRight size={14} className="caret" />
+              {sub === 'rolecount' && <div className="menu menu-sub">
+                <div className="pp-rc-row">
+                  <div className="pp-min-meta"><span>Show members with</span>{roleCount !== null && <button className="pp-min-clear" type="button" onClick={() => setRcDraft('')}>Reset</button>}</div>
+                  <div className="pp-rc-op" ref={rcOpRef}>
+                    <button type="button" className="pp-rc-op-btn" aria-haspopup="listbox" aria-expanded={rcOpOpen} onClick={() => setRcOpOpen((o) => !o)}>
+                      <span>{rcOpLabel}</span><CaretDown size={14} />
+                    </button>
+                    {rcOpOpen && <Menu>
+                      {ROLE_COUNT_OPS.map((o) => <MenuItem key={o.value} label={o.label} selected={o.value === rcOp} onSelect={() => { setRcOp(o.value); setRcOpOpen(false) }} />)}
+                    </Menu>}
+                  </div>
+                  <div className="pp-stepper">
+                    <button type="button" aria-label="Decrease role count" onClick={() => stepRoleCount(-1)}><Minus size={12} /></button>
+                    <input value={rcDraft} aria-label="Role count" inputMode="numeric" placeholder="0" onChange={(e) => onRoleCountInput(e.target.value)} onFocus={(e) => e.target.select()} />
+                    <button type="button" aria-label="Increase role count" onClick={() => stepRoleCount(1)}><Plus size={12} /></button>
+                  </div>
+                  <span className="pp-min-hint">Shows members with {rcOpLabel.toLowerCase()} {rcDraft === '' ? '0' : rcDraft} role{rcDraft === '1' ? '' : 's'}</span>
+                </div>
+                {roleCount !== null && <MenuItem label="Clear" onSelect={() => setRcDraft('')} />}
+              </div>}
+            </div>
             <div className="menu-sub-row" onMouseEnter={() => { setSub('influence'); setDraft(String(minInf ?? 0)) }}>
               <i className="menu-sub-icon"><Fire size={16} /></i><span className="menu-label">Influence score</span><CaretRight size={14} className="caret" />
               {sub === 'influence' && <div className="menu menu-sub">
@@ -313,41 +371,45 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange }: Ran
         </div>
       </div>
 
-      {(tiers.length > 0 || roleSel.length > 0 || minInf !== null) && <div className="people-pills">
+      {(watch || tiers.length > 0 || roleSel.length > 0 || minInf !== null || roleCount !== null) && <div className="people-pills">
+        {watch && <span className="filter-pill">Members to watch<button aria-label="Clear members to watch" onClick={() => { onClearWatch?.(); setPage(1) }}><X size={16} /></button></span>}
         {tiers.map((t) => <span className="filter-pill" key={t}>{t}<button aria-label={`Clear ${t} filter`} onClick={() => toggleTier(t)}><X size={16} /></button></span>)}
         {roleSel.map((id) => { const r = roles.find((x) => x.id === id); return <span className="filter-pill" key={id}>{r ? r.name : id}<button aria-label={`Clear ${id} filter`} onClick={() => toggleRole(id)}><X size={16} /></button></span> })}
         {minInf !== null && <span className="filter-pill">Influence min. {minInf}<button aria-label="Clear influence filter" onClick={() => setMinInf(null)}><X size={16} /></button></span>}
+        {roleCount && <span className="filter-pill">Role count: {rcOpLabel} {roleCount.value}<button aria-label="Clear role count filter" onClick={() => setRcDraft('')}><X size={16} /></button></span>}
       </div>}
 
       {total === 0
         ? <div className="pt-empty"><span>No members match your filters.</span><button type="button" onClick={() => { setSearch(''); clearFilters(); setSegmentId('all') }}>Clear filters</button></div>
         : <div className="people-table-wrap">
-          <div className="people-table">
+          <div className={`people-table${showWatch ? ' watch' : ''}`}>
             <div className="pt-head">
               <div className="pt-cell pt-check"><button type="button" className={`pe-checkbox${somePageSel ? ' on' : ''}`} aria-label={allPageSel ? 'Deselect all on this page' : 'Select all on this page'} aria-pressed={allPageSel} onClick={toggleAll}>{somePageSel && <Check size={16} weight="bold" />}</button></div>
-              <div className="pt-cell"><SortBtn label="Member" active={sortKey === 'name'} dir={sortDir} onClick={() => onSort('name')} /></div>
-              <div className="pt-cell"><span className="pt-sort-inactive">Activity level</span></div>
-              <div className="pt-cell"><SortBtn label="Influence" active={sortKey === 'influence'} dir={sortDir} onClick={() => onSort('influence')} /></div>
-              <div className="pt-cell"><span className="pt-sort-inactive">Roles</span></div>
-              <div className="pt-cell"><SortBtn label="Joined" active={sortKey === 'joinedAt'} dir={sortDir} onClick={() => onSort('joinedAt')} /></div>
-              <div className="pt-cell"><SortBtn label="Last activity" active={sortKey === 'lastActive'} dir={sortDir} onClick={() => onSort('lastActive')} /></div>
+              <div className="pt-cell">{showWatch ? <span className="pt-sort-inactive">Member</span> : <SortBtn label="Member" active={sortKey === 'name'} dir={sortDir} onClick={() => onSort('name')} />}</div>
+              {showWatch ? <div className="pt-cell"><span className="pt-sort-inactive">Change</span></div> : <div className="pt-cell"><span className="pt-sort-inactive">Activity level</span></div>}
+              {showWatch ? <div className="pt-cell"><span className="pt-sort-inactive">Activity level</span></div> : <div className="pt-cell"><SortBtn label="Influence" active={sortKey === 'influence'} dir={sortDir} onClick={() => onSort('influence')} /></div>}
+              {!showWatch && <div className="pt-cell"><span className="pt-sort-inactive">Roles</span></div>}
+              {!showWatch && <div className="pt-cell"><SortBtn label="Joined" active={sortKey === 'joinedAt'} dir={sortDir} onClick={() => onSort('joinedAt')} /></div>}
+              {!showWatch && <div className="pt-cell"><SortBtn label="Last activity" active={sortKey === 'lastActive'} dir={sortDir} onClick={() => onSort('lastActive')} /></div>}
               <div className="pt-cell"><span className="pt-sort-inactive">Activity graph</span></div>
             </div>
-            {slice.map((r) => {
+            {visibleRows.map((r) => {
               const picked = selected.has(r.id)
+              const w = showWatch ? watchMap.get(r.id) : undefined
               const rest = r.roles.slice(1)
               const lastText = r.lastActiveAtMs === -Infinity ? '—' : (() => { const d = Math.floor((endMs - r.lastActiveAtMs) / DAY); return d <= 0 ? 'Today' : `${d}d ago` })()
               return <div className={`pt-row${picked ? ' selected' : ''}`} key={r.id}>
                 <div className="pt-cell pt-check"><button type="button" className={`pe-checkbox${picked ? ' on' : ''}`} aria-label={`Select ${r.name}`} aria-pressed={picked} onClick={() => toggleRow(r.id)}>{picked && <Check size={16} weight="bold" />}</button></div>
                 <div className="pt-cell"><div className="pt-member"><Avatar spec={getMemberAvatar(r.id)} name={r.name} size={32} /><span className="pt-names"><button type="button" className="pt-name" onClick={() => setSelectedId(r.id)}>{r.name}</button>{r.username && <span className="pt-username">@{r.username}</span>}</span></div></div>
+                {showWatch && <div className="pt-cell"><span className="watch-activity"><span className={`watch-dir ${w?.direction}`}>{w?.direction === 'up' ? <ArrowUp size={12} weight="bold" /> : <ArrowDown size={12} weight="bold" />}</span>{w && (w.kind === 'tier' && w.from && w.to ? <span className="watch-change">Moved from <TierPill tier={w.from} /> to <TierPill tier={w.to} /></span> : <span className="watch-change">{w.text}</span>)}</span></div>}
                 <div className="pt-cell"><TierPill tier={r.tier} /></div>
-                <div className="pt-cell"><span className="pt-influence"><Fire size={16} /><b>{r.influence}</b></span></div>
-                <div className="pt-cell"><div className="pt-roles">
+                {showWatch ? null : <div className="pt-cell"><span className="pt-influence"><Fire size={16} /><b>{r.influence}</b></span></div>}
+                {showWatch ? null : <div className="pt-cell"><div className="pt-roles">
                   {r.roles[0] ? <span className="role-pill"><i className="role-dot" style={{ background: r.roles[0].color }} />{r.roles[0].name}</span> : <span className="role-pill empty">&mdash;</span>}
                   {rest.length > 0 && <span className="role-pill more" tabIndex={0}>{`+${rest.length}`}<span className="tip" role="tooltip">{rest.map((n) => <span className="pp-role-label" key={n.id}><i className="role-dot" style={{ background: n.color }} />{n.name}</span>)}</span></span>}
-                </div></div>
-                <div className="pt-cell pt-num">{joinFmt.format(r.joinedAtMs)}</div>
-                <div className="pt-cell pt-num">{lastText}</div>
+                </div></div>}
+                {showWatch ? null : <div className="pt-cell pt-num">{joinFmt.format(r.joinedAtMs)}</div>}
+                {showWatch ? null : <div className="pt-cell pt-num">{lastText}</div>}
                 <div className="pt-cell"><Sparkline series={r.series} /></div>
               </div>
             })}
