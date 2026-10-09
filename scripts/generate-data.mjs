@@ -50,23 +50,33 @@ if (REBUILD) {
 }
 
 // ---------------------------------------------------------------------------
-// Mid-year cohort
+// Mid-year cohort + late-summer top-up
 // ---------------------------------------------------------------------------
 // The seeded roster joins almost entirely in Dec 2023 - Apr 2024 and then nothing
 // until Aug, so May, June and July have zero joins. That is why "New Members"
-// reads 70 for a 30-, 60- and 90-day window alike -- the date range does nothing
-// to the Overview headline. It cannot be fixed by redistribution: only 106 of
-// 2400 members have any activity on or after 1 Jun, and joinedAt <= firstMessage
-// blocks moving the rest, so the gap needs real records.
+// reads 70 for a 30-, 60- and 90-day window alike without the cohort. It cannot
+// be fixed by redistribution: only 106 of 2400 members have any activity on or
+// after 1 Jun, and joinedAt <= firstMessage blocks moving the rest, so the gap
+// needs real records.
 //
-// This block strips any previously written cohort on load, before role and name
-// assignment. Those blocks are sized on members.length and consume CULTURES in
-// order, so a persisted cohort would shift every slot and reshuffle all 2400
+// Two injected blocks fill the calendar:
+//   - COHORT_*: ~80 members/month across May-Jul, keeping the Overview's
+//     period-scoped New Members count reading ~80/month instead of 0.
+//   - TOPUP_*: a smaller batch joining Aug 11-24. The cohort months are capped
+//     at day 27 and the seeded roster's wave starts Aug 27, so without it the
+//     14-day and 28-day "New Members" windows would both read 70 (zero joins in
+//     the 15-28 day window) and the change chip would render a flat 0%.
+//
+// Both blocks strip any previously written records on load, before role and
+// name assignment. Those blocks are sized on members.length and consume CULTURES
+// in order, so a persisted cohort would shift every slot and reshuffle all 2400
 // existing names. Stripping here and re-deriving below keeps the run idempotent.
 const COHORT_PER_MONTH = 80
 const COHORT_MONTHS = ['2024-05', '2024-06', '2024-07']
 const COHORT_FIRST = 2401
 const COHORT_TOTAL = COHORT_PER_MONTH * COHORT_MONTHS.length
+const TOPUP_FIRST = 2641
+const TOPUP_TOTAL = 20
 const cohortId = (n) => `m_${String(n).padStart(4, '0')}`
 {
   let stripped = 0
@@ -74,7 +84,9 @@ const cohortId = (n) => `m_${String(n).padStart(4, '0')}`
     const id = members[i].id
     if (!id.startsWith('m_')) continue
     const n = Number(id.slice(2))
-    if (n >= COHORT_FIRST && n < COHORT_FIRST + COHORT_TOTAL) { members.splice(i, 1); stripped++ }
+    const inCohort = n >= COHORT_FIRST && n < COHORT_FIRST + COHORT_TOTAL
+    const inTopUp = n >= TOPUP_FIRST && n < TOPUP_FIRST + TOPUP_TOTAL
+    if (inCohort || inTopUp) { members.splice(i, 1); stripped++ }
   }
   if (stripped) console.log(`cohort: stripped ${stripped} previously written records`)
 }
@@ -99,11 +111,24 @@ community.createdAt = backdateIso(community.createdAt)
 // Member roles: deterministic assignment against the roles.json roster
 // (Core-Team role_001, Moderator role_002, Admin role_003, Cohort-Mentor
 // role_004, Bounty-Hunter role_005, Contributor role_006, Ambassador role_007,
-// Degen role_008, Member role_009, Design role_010). Seed roles are discarded —
-// every run rebuilds from fixed tags, so re-runs are byte-identical. Staff
-// (Admin, Moderator, Core-Team) are tiny fixed-size cohorts; specialty roles
-// stack on Member Discord-style; ~10% of humans (weighted toward low-activity
-// authors by existing message+reply counts) carry no roles at all. Bots keep [].
+// Degen role_008, Member role_009, Design role_010, plus the five stacking
+// badges Builder role_011, OG role_012, Grantee role_013, Hacker role_014 and
+// Event-Host role_015). Seed roles are discarded — every run rebuilds from
+// fixed tags, so re-runs are byte-identical.
+//
+// Roles come in two layers:
+//   - Functional roles (staff + specialty) are exclusive: each is claimed from
+//     the remaining pool, so a member holds at most one. Staff (Admin,
+//     Moderator, Core-Team) are tiny fixed-size cohorts.
+//   - Badge roles (Builder, Hacker, Grantee, Event-Host, OG) stack freely. Each
+//     is a seeded Bernoulli whose probability rises with a member's engagement
+//     (activity rank blended with tenure seniority), so badges cluster on the
+//     long-tenured active core and thin out toward the periphery. This is what
+//     lets the most engaged members reach the full seven-role stack
+//     (one functional role + Member + five badges).
+//
+// ~5% of humans (weighted toward low-activity authors by existing message+reply
+// counts) carry no roles at all. Bots keep [].
 {
   const humans = members.filter((m) => !m.bot).sort((a, b) => a.id.localeCompare(b.id))
   const activity = new Map()
@@ -126,14 +151,60 @@ community.createdAt = backdateIso(community.createdAt)
   claim(120, 'member-role:ambassador', 'role_007')
   claim(200, 'member-role:degen', 'role_008')
   claim(80, 'member-role:design', 'role_010')
-  // ~10% role-less, weighted toward low activity: uniform pick from the
+  // ~5% role-less, weighted toward low activity: uniform pick from the
   // quieter half of the remaining pool.
   const quiet = [...remaining].sort((a, b) => (activity.get(a) || 0) - (activity.get(b) || 0) || (a < b ? -1 : 1))
-  const roleless = new Set(pickN(quiet.slice(0, Math.ceil(quiet.length / 2)), 240, 'member-role:none'))
+  const roleless = new Set(pickN(quiet.slice(0, Math.ceil(quiet.length / 2)), 130, 'member-role:none'))
   remaining = remaining.filter((id) => !roleless.has(id))
+
+  // Engagement signal for the badge layer: activity rank (65%) blended with
+  // tenure seniority (35%), normalised to [0,1] where 1 is the most engaged.
+  // Rank positions are used rather than raw counts so a handful of extreme
+  // posters do not flatten the curve for everyone else.
+  const frac = (seed) => hash(seed) / 4294967296
+  const normRank = (vals, higherIsBetter) => {
+    const order = [...vals.keys()].sort((a, b) => (higherIsBetter ? vals[b] - vals[a] : vals[a] - vals[b]) || a - b)
+    const rank = new Array(vals.length)
+    for (let i = 0; i < order.length; i++) rank[order[i]] = order.length > 1 ? i / (order.length - 1) : 1
+    return rank
+  }
+  const activityRank = normRank(humans.map((m) => activity.get(m.id) || 0), true)
+  const tenureRank = normRank(humans.map((m) => Date.parse(m.joinedAt)), false)
+  const engagement = humans.map((_, i) => 0.65 * activityRank[i] + 0.35 * tenureRank[i])
+  // Badge model: [role id, min probability, max probability, exponent, signal].
+  // Probability at engagement/tenure x is lo + (hi - lo) * x^power, so badges
+  // concentrate on the strongest third while still reaching most of the roster.
+  const BADGES = [
+    ['role_011', 0.14, 1.0, 1.6, 'engagement'],
+    ['role_014', 0.09, 0.95, 1.6, 'engagement'],
+    ['role_013', 0.07, 0.85, 1.6, 'engagement'],
+    ['role_015', 0.06, 0.78, 1.6, 'engagement'],
+    ['role_012', 0.12, 1.0, 1.15, 'tenure'],
+  ]
+  for (let i = 0; i < humans.length; i++) {
+    const m = humans[i]
+    if (roleless.has(m.id)) continue
+    const e = engagement[i]
+    const s = tenureRank[i]
+    for (const [role, lo, hi, power, signal] of BADGES) {
+      const p = lo + (hi - lo) * Math.pow(signal === 'tenure' ? s : e, power)
+      if (frac(`member-badge:${role}:${m.id}`) < p) assigned.get(m.id).push(role)
+    }
+  }
+
+  // Display priority: leadership and functional roles first, badges next, and
+  // Member last, so the single pill the People table shows is the most
+  // meaningful role the member holds.
+  const PRIORITY = [
+    'role_003', 'role_001', 'role_002', 'role_004', 'role_007', 'role_005',
+    'role_006', 'role_010', 'role_008', 'role_011', 'role_014', 'role_013',
+    'role_015', 'role_012', 'role_009',
+  ]
+  const priorityIndex = new Map(PRIORITY.map((id, i) => [id, i]))
   for (const m of humans) {
     const roles = assigned.get(m.id)
     if (!roleless.has(m.id)) roles.push('role_009')
+    roles.sort((a, b) => (priorityIndex.get(a) ?? 99) - (priorityIndex.get(b) ?? 99))
     m.roles = roles
   }
   for (const m of members) if (m.bot) m.roles = []
@@ -339,6 +410,80 @@ const cohortStart = members.length
   }
   if (n !== COHORT_TOTAL) throw new Error(`Cohort size mismatch: ${n} != ${COHORT_TOTAL}`)
   console.log(`cohort: injected ${n} members across ${COHORT_MONTHS.join(', ')}`)
+}
+
+// ---------------------------------------------------------------------------
+// Late-summer top-up (injection)
+// ---------------------------------------------------------------------------
+// A small batch joining Aug 11-24 so the 14-day and 28-day New Members windows
+// no longer read identically (without it the 15-28 day window holds zero joins
+// and the change chip renders a flat 0%). Same append-after-authoring rationale
+// as the main cohort: appended here, after roles/names/handles, and after
+// `cohortStart` above, so the new ids fall inside `cohortIds` and are excluded
+// from the voice-only draw the same way the main cohort is.
+//
+// Archetype mix mirrors how a late-summer wave behaves: most stay quiet, but a
+// visible share (lurker/new/regular) posts soon after joining so the 28-day
+// activation rate is not artificially depressed the way an all-inactive batch
+// would. `regular` here is the closest thing the generator has to a modestly
+// "active" joiner.
+const TOPUP_ARCHETYPES = ['inactive', 'inactive', 'inactive', 'inactive', 'inactive', 'lurker', 'lurker', 'new', 'new', 'regular']
+{
+  const existingNames = new Set(members.map((m) => m.displayName.toLowerCase()))
+  const existingHandles = new Set(members.map((m) => m.username.toLowerCase()))
+  const existing = new Set(members.map((m) => m.id))
+  // Same largest-remainder culture allocation as the main cohort, seeded on a
+  // fresh tag so neither block's slot ordering interferes with the other.
+  const exact = CULTURES.map((c) => (c.weight / cultureTotal) * TOPUP_TOTAL)
+  const counts = exact.map(Math.floor)
+  let leftover = TOPUP_TOTAL - counts.reduce((s, n) => s + n, 0)
+  const remainderOrder = [...CULTURES.keys()].sort((a, b) => (exact[b] % 1) - (exact[a] % 1) || (CULTURES[a].id < CULTURES[b].id ? -1 : 1))
+  for (let k = 0; leftover > 0; k++, leftover--) counts[remainderOrder[k % remainderOrder.length]]++
+  let n = 0
+  for (let ci = 0; ci < CULTURES.length; ci++) {
+    const culture = CULTURES[ci]
+    const want = counts[ci]
+    if (!want) continue
+    const combos = [...new Set(culture.given.flatMap((g) =>
+      culture.surnames.filter((s) => s.toLowerCase() !== g.toLowerCase()).map((s) => `${g} ${s}`)))]
+      .filter((c) => !existingNames.has(c.toLowerCase()))
+    if (combos.length < want) throw new Error(`Top-up name pool too small for ${culture.id}: ${combos.length} < ${want}`)
+    const names = pickN(combos, want, `topup-names:${culture.id}`)
+    for (let i = 0; i < want; i++) {
+      const id = cohortId(TOPUP_FIRST + n)
+      n++
+      if (existing.has(id)) throw new Error(`Top-up id collision: ${id}`)
+      const full = names[i]
+      existingNames.add(full.toLowerCase())
+      const tokens = full.split(' ').filter(Boolean)
+      const given = slugify(tokens[0])
+      const surname = slugify(tokens.slice(1).join(' ') || tokens[0])
+      const style = pick(['clean', 'clean', 'clean', 'numbered', 'underscore', 'goofy', 'goofy'], 'topup-handle-style:' + id)
+      let base = style === 'numbered' ? `${given}.${surname}${hash('topup-handle-num:' + id) % 90 + 10}`
+        : style === 'underscore' ? `${given}_${surname}`
+          : style === 'goofy' ? `${given}${pick(handleFlavors, 'topup-handle-flavor:' + id)}`
+            : `${given}.${surname}`
+      let handle = base
+      let k = 0
+      while (existingHandles.has(handle.toLowerCase())) handle = `${base}${hash('topup-handle-retry:' + id + ':' + k++) % 999 + 101}`
+      existingHandles.add(handle.toLowerCase())
+      // Joined inside Aug 11-24, the empty window between the July cohort's day-27
+      // cap and the seeded roster's Aug 27 wave.
+      const day = 11 + (hash('topup-join-day:' + id) % 14)
+      members.push({
+        id,
+        username: handle,
+        displayName: full,
+        joinedAt: `2024-08-${String(day).padStart(2, '0')}T${String(hash('topup-join-hour:' + id) % 12 + 8).padStart(2, '0')}:${String(hash('topup-join-min:' + id) % 60).padStart(2, '0')}:00+01:00`,
+        roles: hash('topup-specialty:' + id) % 10 === 0 ? ['role_007', 'role_009'] : ['role_009'],
+        bot: false,
+        archetype: TOPUP_ARCHETYPES[(n - 1) % TOPUP_ARCHETYPES.length],
+        leftAt: null,
+      })
+    }
+  }
+  if (n !== TOPUP_TOTAL) throw new Error(`Top-up size mismatch: ${n} != ${TOPUP_TOTAL}`)
+  console.log(`topup: injected ${n} members joining 2024-08-11 .. 2024-08-24`)
 }
 
 const END_ISO = '2024-09-07T23:59:00+01:00'
@@ -1560,4 +1705,4 @@ const leftCount = members.filter((m) => m.leftAt).length
 const joinsIn = (days) => members.filter((m) => !m.bot && Date.parse(m.joinedAt) >= END - days * DAY && Date.parse(m.joinedAt) <= END).length
 const leavesIn = (days) => members.filter((m) => m.leftAt && Date.parse(m.leftAt) >= END - days * DAY && Date.parse(m.leftAt) <= END).length
 console.log(`members: ${presentMembers.length} present, ${leftCount} left (bots: ${members.filter((m) => m.bot).length})`)
-for (const d of [7, 30, 60, 90]) console.log(`  last ${String(d).padStart(3)}d: joined ${String(joinsIn(d)).padStart(4)}  left ${String(leavesIn(d)).padStart(4)}  net ${String(joinsIn(d) - leavesIn(d)).padStart(5)}`)
+for (const d of [7, 14, 28, 84]) console.log(`  last ${String(d).padStart(3)}d: joined ${String(joinsIn(d)).padStart(4)}  left ${String(leavesIn(d)).padStart(4)}  net ${String(joinsIn(d) - leavesIn(d)).padStart(5)}`)

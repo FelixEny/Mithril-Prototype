@@ -36,13 +36,13 @@ A deterministic generator (`scripts/generate-data.mjs`) produces and maintains t
 
 Reported synthetic dataset properties:
 
-- members: 2400 humans + 2 bots
-- messages: ~119k across 2024-03-05 .. 2024-09-07
+- members: 2660 humans + 2 bots (2400 seeded + 240 mid-year cohort across May–Jul + 20 late-summer top-up joining Aug 11–24, which keeps the 14-day and 28-day New Members windows from reading identically)
+- messages: ~117k across 2024-03-10 .. 2024-09-07
 - threads: 14, referenced from messages via `threadId`
-- member `roles` are role ids resolving against `roles.json` (Core-Team, Moderator, Admin, Cohort-Mentor, Bounty-Hunter, Contributor, Ambassador, Degen, Member, Design — each with a Discord-style `color` used for the role dots in the People filter menu); assigned deterministically by the generator (tiny fixed-size staff cohorts, specialty roles stacking on Member, ~10% of members role-less weighted toward low activity, bots always role-less); role-less members render `--` in the People table
+- member `roles` are role ids resolving against `roles.json` (15 roles: Core-Team, Moderator, Admin, Cohort-Mentor, Bounty-Hunter, Contributor, Ambassador, Degen, Member, Design, Builder, OG, Grantee, Hacker, Event-Host — each with a Discord-style `color` used for the role dots in the People filter menu); assigned deterministically by the generator in two layers. **Functional roles** (staff + specialty) are exclusive, so a member holds at most one; **badge roles** (Builder, Hacker, Grantee, Event-Host, OG) stack freely on top. Each badge is a seeded Bernoulli whose probability rises with a member's engagement (activity rank blended with tenure seniority), so badges cluster on the long-tenured active core and thin out toward the periphery; the most engaged members reach the full seven-role stack (one functional role + Member + five badges). Role order is a fixed display priority (leadership → specialty → badges → Member), so the single pill the People table shows is the member's most meaningful role and the rest collapse into the `+N` tooltip. ~5% of members are role-less, weighted toward low activity; bots are always role-less. Role-less members render `--` in the People table
 - segments: 5 built-in saved filtered lists (`src/data/segments.json`) — dynamic segments store criteria (membership computed at render time by `src/segments.ts`), static segments store explicit `memberIds`
 - member `displayName`s are unique and culturally coherent across the corpus: each member is allocated to one of 19 cultures in `scripts/name-data.mjs` (largest-remainder from culture weights — US/UK/Nigeria/India/Kenya/Ghana/Brazil/Mexico/South Africa/LatAm/Philippines/Vietnam/China/Japan/Korea/Indonesia/Germany/France/Italy), then given + surname are drawn from that culture's pools only ("Given Surname" ordering everywhere), sampled without replacement and assigned by member id
-- member `username`s (the `@handle`) are derived deterministically from that culture-scoped display name, so every handle traces to its own visible name ("Adaeze Obi" → `@adaeze.obi`, never a leftover seed handle). Handles read as realistic community handles: a mix of clean `given.surname`, numbered `given.surname27`, underscore `given_surname`, initial `a.obi`, and a ~33% goofier share kept name-anchored (`xxadaeze`, `therealadaeze`, `adaeze_lol`). Staff/admins (`role_001`/`role_002`) keep clean `given.surname` handles for easy @-recognition; styles + any digits are sampled deterministically via seeded picks on fixed tags, and a global dedupe appends a deterministic numeric suffix on slug collision before uniqueness is asserted the same way names are
+- member `username`s (the `@handle`) are derived deterministically from that culture-scoped display name, so every handle traces to its own visible name ("Adaeze Obi" → `@adaeze.obi`, never a leftover seed handle). Handles read as realistic community handles: a mix of clean `given.surname`, numbered `given.surname27`, underscore `given_surname`, initial `a.obi`, and a ~33% goofier share kept name-anchored (`xxadaeze`, `therealadaeze`, `adaeze_lol`). Staff/admins (`role_001`/`role_003`) keep clean `given.surname` handles for easy @-recognition; styles + any digits are sampled deterministically via seeded picks on fixed tags, and a global dedupe appends a deterministic numeric suffix on slug collision before uniqueness is asserted the same way names are
 - the dataset is internally consistent (every `authorId`/`memberId`/`channelId`/`threadId` resolves)
 
 ## Analytics rules
@@ -79,7 +79,7 @@ Activity Score:
 - Interactions (replies + reactions): 15%
 - Channel Breadth: 10%
 
-Superuser is approximately the top 5% of active members, subject to a meaningful-activity floor. Contributor is the next approximately 15%. Regular is recurring active participation. Lurker has detectable but insufficient activity. Inactive has no qualifying activity.
+Superuser is approximately the top 5% of active members, subject to a meaningful-activity floor. Contributor is the next approximately 15%, subject to the same floor. The floor requires 5+ active days in the window: a short burst can outscore most actives on volume, but without sustained presence it tiers as Lurker, not Superuser/Contributor. Regular is recurring active participation. Lurker has detectable but insufficient activity. Inactive has no qualifying activity.
 
 Meaningful relationship:
 - At least 2 interactions between two members
@@ -105,12 +105,12 @@ The UI should make the data feel like a real Discord community, not a collection
 
 Reference cardinality from a fresh `node scripts/generate-data.mjs` run:
 
-- messages: 119281 (~1350 authors)
-- replies: 56645
-- reactions: 130307
-- voiceSessions: 9049 (~1254 unique members; 36 voice-only)
-- threads: 14 (18587 messages in threads)
-- date range: 2024-03-05 .. 2024-09-07
+- messages: 116678 (881 authors)
+- replies: 55443
+- reactions: 127412
+- voiceSessions: 6554 (639 unique members; 36 voice-only)
+- threads: 14 (17861 messages in threads)
+- date range: 2024-03-10 .. 2024-09-07
 
 After any generator change, assert the following. (If the activity model changed, run once, then a second time — the corpus settles fully on the second run — then run the checks against that output.)
 

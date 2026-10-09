@@ -9,6 +9,7 @@ import voiceSessionsUrl from './voice-sessions.json?url'
 import schemaUrl from './schema.json?url'
 import segmentsUrl from './segments.json?url'
 import communityUrl from './community.json?url'
+import type { RoleCountOp } from '../people-filters'
 
 export type Member = { id: string; name: string; username?: string; joinedAt: Date; bot?: boolean; archetype?: string; roles?: string[]; leftAt: Date | null }
 export type Role = { id: string; name: string; color: string }
@@ -30,6 +31,8 @@ export type SegmentCriteria = {
   minInfluence?: number
   joinedWithinDays?: number
   joinedBeforeDays?: number
+  // Compared against the member's unique role count (@everyone excluded).
+  roleCount?: { op: RoleCountOp; value: number }
 }
 export type Segment = { id: string; name: string; kind: 'static' | 'dynamic'; builtIn?: boolean; description?: string; criteria?: SegmentCriteria; memberIds?: string[] }
 

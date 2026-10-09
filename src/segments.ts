@@ -1,6 +1,7 @@
 import { members, endDate, presentAt, segments, type Member, type Segment, type SegmentCriteria } from './data'
 import { activitySnapshot, type ActivitySnapshot } from './analytics'
 import { influenceEngine } from './relationships'
+import { matchesRoleCount, roleCountOf } from './people-filters'
 
 const day = 86400000
 const save = (items: Segment[]) => { try { localStorage.setItem('mithril.segments.v1', JSON.stringify(items)) } catch { /* prototype: ignore storage errors */ } }
@@ -59,6 +60,7 @@ function matchesCriteria(m: Member, c: SegmentCriteria, snap: Map<string, Activi
   if (m.joinedAt.getTime() > asOfMs) return false
   if (c.archetypes && c.archetypes.length && !(m.archetype && c.archetypes.includes(m.archetype))) return false
   if (c.roles && c.roles.length && !c.roles.some((r) => m.roles?.includes(r))) return false
+  if (c.roleCount && !matchesRoleCount(roleCountOf(m.roles), c.roleCount.op, c.roleCount.value)) return false
   if (c.joinedWithinDays !== undefined && m.joinedAt.getTime() < asOfMs - c.joinedWithinDays * day) return false
   if (c.joinedBeforeDays !== undefined && m.joinedAt.getTime() > asOfMs - c.joinedBeforeDays * day) return false
   const s = snap.get(m.id)

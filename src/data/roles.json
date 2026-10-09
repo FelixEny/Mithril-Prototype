@@ -48,5 +48,30 @@
     "id": "role_010",
     "name": "Design",
     "color": "#EC7AB8"
+  },
+  {
+    "id": "role_011",
+    "name": "Builder",
+    "color": "#00BCD4"
+  },
+  {
+    "id": "role_012",
+    "name": "OG",
+    "color": "#E91E63"
+  },
+  {
+    "id": "role_013",
+    "name": "Grantee",
+    "color": "#6D28D9"
+  },
+  {
+    "id": "role_014",
+    "name": "Hacker",
+    "color": "#A3E635"
+  },
+  {
+    "id": "role_015",
+    "name": "Event-Host",
+    "color": "#FFC107"
   }
 ]
