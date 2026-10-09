@@ -7,7 +7,8 @@ import { readCssVar } from './tokens'
 // (2px internal padding so neighbours don't bleed when the disc is magnified).
 // Cells are packed deterministically (keys sorted) so the result is stable
 // between sessions. Initials are baked synchronously at construction (fast
-// first paint); photos decode async and repaint their cell when ready.
+// first paint); photos decode async and repaint their cell only after a
+// validated bitmap is available.
 
 export const CELL = 128
 export const PAD = 2
@@ -27,8 +28,17 @@ let cssTokens: {
   weight: string
   surface: string
   opticalLift: number
+  pendingFill: string
+  pendingInk: string
 } | null = null
-function readCssTokens(): { family: string; weight: string; surface: string; opticalLift: number } {
+function readCssTokens(): {
+  family: string
+  weight: string
+  surface: string
+  opticalLift: number
+  pendingFill: string
+  pendingInk: string
+} {
   if (cssTokens) return cssTokens
   cssTokens = {
     family: readCssVar('--font-family', 'Geist, sans-serif'),
@@ -37,6 +47,8 @@ function readCssTokens(): { family: string; weight: string; surface: string; opt
     // Declared in em (--avatar-initial-optical-lift); 1em is the glyph size
     // here, so the numeric part converts straight to px by scaling the glyph.
     opticalLift: parseFloat(readCssVar('--avatar-initial-optical-lift', '0')) || 0,
+    pendingFill: readCssVar('--surface-avatar', '#E5E9F2'),
+    pendingInk: readCssVar('--content-tertiary', '#8E96A4'),
   }
   return cssTokens
 }
@@ -58,6 +70,60 @@ function inkMetricsOf(ctx: CanvasRenderingContext2D, text: string, glyph: number
   }
   inkMetricCache.set(key, metrics)
   return metrics
+}
+
+const MIN_PHOTO_OPAQUE_FRACTION = 0.9
+
+/**
+ * Generic pending-photo marker. The silhouette is vertically symmetric, so the
+ * atlas Y-mirror leaves it unchanged, and it deliberately carries no initial.
+ */
+function drawPendingAvatar(ctx: CanvasRenderingContext2D): void {
+  const t = readCssTokens()
+  ctx.fillStyle = t.pendingInk
+  ctx.beginPath()
+  // Coordinates are local to the already-centred, Y-mirrored cell context used
+  // by bake(): absolute cell coordinates would draw outside the cell.
+  ctx.arc(0, -CONTENT * 0.08, CONTENT * 0.105, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.ellipse(0, CONTENT * 0.225, CONTENT * 0.24, CONTENT * 0.175, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+/**
+ * Check that an image-load event produced a usable, opaque avatar bitmap before
+ * it is allowed to replace the cell's fallback. This guards against zero-size
+ * SVG decodes, transparent results, and tainted canvases.
+ */
+function avatarImageIsUsable(img: HTMLImageElement): boolean {
+  if (!img.complete) return false
+  const width = img.naturalWidth
+  const height = img.naturalHeight
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false
+  try {
+    const size = Math.floor(CONTENT / 2)
+    const probe = document.createElement('canvas')
+    probe.width = size
+    probe.height = size
+    const probeCtx = probe.getContext('2d', { willReadFrequently: true })
+    if (!probeCtx) return false
+    probeCtx.clearRect(0, 0, size, size)
+    probeCtx.save()
+    probeCtx.translate(size / 2, size / 2)
+    probeCtx.scale(1, -1)
+    const scale = Math.max(size / width, size / height)
+    probeCtx.drawImage(img, (-width * scale) / 2, (-height * scale) / 2, width * scale, height * scale)
+    probeCtx.restore()
+    const pixels = probeCtx.getImageData(0, 0, size, size).data
+    let opaque = 0
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] > 16) opaque++
+    }
+    return opaque >= Math.floor(size * size * MIN_PHOTO_OPAQUE_FRACTION)
+  } catch {
+    return false
+  }
 }
 
 export interface AtlasRegion {
@@ -93,6 +159,17 @@ export const avatarSpecFor = (memberId: string): AvatarSpec => {
     src: spec.src ?? undefined,
   }
 }
+
+/**
+ * Neutral placeholder for a photo-backed atlas cell. Image keys are shared by
+ * URL, so they cannot safely carry any one member's initial: using another
+ * sharer's initial would misidentify everyone else waiting for the same photo.
+ */
+export const pendingPhotoSpec = (): AvatarSpec => ({
+  kind: 'none',
+  color: readCssTokens().pendingFill,
+  initial: '',
+})
 
 /** Canonical atlas key for a member — single source of truth for population
  *  and atlas bookkeeping so both always agree (and stay bounded by the palette
@@ -195,19 +272,25 @@ export class MemberAtlas {
     // central CONTENT / 2 of this cell: 62px of visible disc, not 124. The
     // scale must be applied to that sampled diameter or every initial renders
     // at roughly twice its intended size.
-    const glyph = avatarInitialSize(CONTENT / 2)
-    ctx.fillStyle = t.surface
-    ctx.font = `${t.weight} ${glyph.toFixed(2)}px ${t.family}`
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'alphabetic'
-    const ink = inkMetricsOf(ctx, spec.initial, glyph)
-    // Centre the ink box (a single glyph's ink is narrower and taller than its
-    // em box, so textAlign/textBaseline leave it visibly off-centre), then
-    // lift by a fraction of the cap height for optical centering. Local +Y is
-    // canvas-up, which the shader then flips, so screen-up is negative local Y.
-    const dx = (ink.left - ink.right) / 2
-    const dy = (ink.ascent - ink.descent) / 2 - glyph * t.opticalLift
-    ctx.fillText(spec.initial, dx, dy)
+    if (spec.initial === '') {
+      // Photo-backed cells share one atlas region per image source, so the
+      // placeholder must not identify any one member.
+      drawPendingAvatar(ctx)
+    } else {
+      const glyph = avatarInitialSize(CONTENT / 2)
+      ctx.fillStyle = t.surface
+      ctx.font = `${t.weight} ${glyph.toFixed(2)}px ${t.family}`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+      const ink = inkMetricsOf(ctx, spec.initial, glyph)
+      // Centre the ink box (a single glyph's ink is narrower and taller than its
+      // em box, so textAlign/textBaseline leave it visibly off-centre), then
+      // lift by a fraction of the cap height for optical centering. Local +Y is
+      // canvas-up, which the shader then flips, so screen-up is negative local Y.
+      const dx = (ink.left - ink.right) / 2
+      const dy = (ink.ascent - ink.descent) / 2 - glyph * t.opticalLift
+      ctx.fillText(spec.initial, dx, dy)
+    }
     ctx.restore()
     ctx.restore()
   }
@@ -230,7 +313,7 @@ export class MemberAtlas {
     // on screen, so the image is drawn flipped to come out upright.
     ctx.translate(cx, cy)
     ctx.scale(1, -1)
-    const { width, height } = img
+    const { naturalWidth: width, naturalHeight: height } = img
     // The shader samples only the cell's central half (see bake()), so cover-fit
     // to that sampled diameter or the disc renders the crop at ~2x zoom.
     const vis = CONTENT / 2
@@ -247,13 +330,15 @@ export class MemberAtlas {
   }
 
   /**
-   * Bake initials for every claimed key synchronously. Photo entries receive
-   * an initials placeholder until their image decodes.
+   * Bake placeholders for every claimed key synchronously. Member-specific
+   * initials are used only when the atlas key already identifies one member.
+   * Photo entries share a cell per image source, so they receive the neutral
+   * pending marker until a validated image decodes.
    */
   bakeInitials(getSpec: (key: string) => AvatarSpec): void {
     for (const key of this.map.keys()) {
       const spec = getSpec(key)
-      this.bake(key, spec)
+      this.bake(key, spec.kind === 'none' ? spec : pendingPhotoSpec())
       if (spec.kind !== 'none') this.photoSpecs.push({ key, spec })
     }
     this.revision++
@@ -276,14 +361,25 @@ export class MemberAtlas {
       const img = new Image()
       if (/^https?:/.test(spec.src)) img.crossOrigin = 'anonymous'
       img.onload = () => {
+        if (!avatarImageIsUsable(img)) {
+          // Do not let an empty, transparent, or tainted decode erase the
+          // neutral placeholder. CORS-blocked images arrive through onerror;
+          // this path covers successful loads with unusable bitmaps.
+          this.loadedPhotos.add(key)
+          this.failedPhotos.add(key)
+          this.revision++
+          this.onUpdate?.()
+          return
+        }
         this.drawPhoto(key, spec, img)
         this.loadedPhotos.add(key)
         this.revision++
         this.onUpdate?.()
       }
       img.onerror = () => {
-        // CORS-blocked or failed images keep the initials fallback that
-        // bakeInitials already drew — never a blank colored circle.
+        // CORS-blocked or failed images keep the neutral pending marker that
+        // bakeInitials already drew — never a blank cell or another member's
+        // initial.
         this.loadedPhotos.add(key)
         this.failedPhotos.add(key)
         this.onUpdate?.()

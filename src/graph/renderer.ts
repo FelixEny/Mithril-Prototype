@@ -2,7 +2,7 @@ import { Sigma } from 'sigma'
 import Graph from 'graphology'
 import { createNodeCompoundProgram } from 'sigma/rendering'
 import { buildPopulation, avatarAttrsOf, clusterColorOf, type MemberFilterLike } from './build'
-import { MemberAtlas, avatarKeyFor, avatarSpecFor, avatarKeyOf, type AvatarSpec } from './textures'
+import { MemberAtlas, avatarKeyFor, avatarSpecFor, avatarKeyOf, pendingPhotoSpec, type AvatarSpec } from './textures'
 import { readCssVar, readCssPx } from './tokens'
 import { createMemberNodeProgram } from './programs/node'
 import { NodeHaloProgram } from './programs/halo'
@@ -366,7 +366,10 @@ export class GraphEngine {
       if (m.bridge || m.mostConnected) this.labelIds.add(m.id)
     }
 
-    // Atlas: claim + bake initials synchronously; photos decode async.
+    // Atlas: claim + bake fallbacks synchronously; photos decode async. Member
+    // initials are safe placeholders only for member-specific keys. Shared
+    // image URLs use a neutral marker so unrelated sharers never borrow one
+    // another's initial.
     this.atlas = new MemberAtlas()
     this.popIds = pop.members.map((m) => m.id)
     const keySpec = new Map<string, AvatarSpec>()
@@ -375,8 +378,8 @@ export class GraphEngine {
       keySpec.set(avatarKeyOf(spec.kind, spec.color, spec.initial, spec.src), spec)
     }
     this.atlas.claim(pop.avatarKeys)
-    this.atlas.bakeInitials((key) => keySpec.get(key) ?? { kind: 'none', color: '#693CF3', initial: '?' })
-    this.atlas.loadPhotos((key) => keySpec.get(key) ?? { kind: 'none', color: '#693CF3', initial: '?' }, () => {
+    this.atlas.bakeInitials((key) => keySpec.get(key) ?? pendingPhotoSpec())
+    this.atlas.loadPhotos((key) => keySpec.get(key) ?? pendingPhotoSpec(), () => {
       // Stale callback from a superseded population — its atlas is gone.
       if (gen !== this.populationGen) return
       // Any repaint of the atlas needs a fresh program so freshly-uploaded

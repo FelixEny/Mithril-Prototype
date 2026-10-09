@@ -2,8 +2,8 @@ import { members } from './data'
 
 // Deterministic avatar assignment per member id, so the same member shows the
 // same avatar on every screen. Mix: ~45% real face photos (local), ~15%
-// Dicebear, ~10% pravatar photos (i.pravatar.cc), ~30% initials circle tinted
-// with the design-system avatar palette.
+// vendored DiceBear portraits (local), ~10% vendored Pravatar portraits (local),
+// ~30% initials circle tinted with the design-system avatar palette.
 export type AvatarKind = 'photo' | 'dicebear' | 'pravatar' | 'none'
 
 // --- Initials typography ----------------------------------------------------
@@ -67,6 +67,19 @@ export const avatarPalette = ['#693CF3', '#009A47', '#008EFF', '#FDAB00', '#3CAA
 const facePool = Array.from({ length: 50 }, (_, i) => `/avatars/faces/m_${String(i + 1).padStart(3, '0')}.jpg`)
 for (let i = 0; i < 50; i++) facePool.push(`/avatars/faces/w_${String(i + 1).padStart(3, '0')}.jpg`)
 
+// The 70 Pravatar portraits are vendored under /avatars/pravatar so graph
+// canvas uploads and DOM images use the same same-origin files. The numeric
+// selection below must stay aligned with those filenames.
+const pravatarFile = (id: string): string =>
+  `/avatars/pravatar/pravatar_${String(1 + (hashId(id) % 70)).padStart(3, '0')}.jpg`
+
+// The DiceBear Adventurer portraits are vendored under /avatars/dicebear as
+// 128px PNGs (scripts/vendor-dicebear.mjs) so the graph never depends on
+// api.dicebear.com at runtime. Filenames carry the seed and palette colour,
+// which is exactly what the remote URL used to encode.
+const dicebearFile = (seed: string, color: string): string =>
+  `/avatars/dicebear/dicebear_${seed}_${color.slice(1)}.png`
+
 const kind = (id: string): AvatarKind => {
   const r = hashId(id) % 100
   if (r < 45) return 'photo'
@@ -88,8 +101,8 @@ export const avatarFor = (id: string): AvatarSpec => {
   const k = kind(id)
   const color = avatarPalette[hashId(id) % avatarPalette.length]
   const src = k === 'photo' ? facePool[hashId(id) % facePool.length]
-    : k === 'dicebear' ? `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}&backgroundColor=${color.slice(1)}&radius=50`
-    : k === 'pravatar' ? `https://i.pravatar.cc/128?img=${1 + (hashId(id) % 70)}`
+    : k === 'dicebear' ? dicebearFile(seed, color)
+    : k === 'pravatar' ? pravatarFile(id)
     : null
   return { kind: k, seed, src, color }
 }
