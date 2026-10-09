@@ -19,7 +19,7 @@ import type { RangeProps } from './EngagementPage'
 
 const DAY = 86400000
 
-export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange, active = true }: RangeProps & { active?: boolean }) {
+export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange, active = true, focusMemberId, onFocusConsumed }: RangeProps & { active?: boolean; focusMemberId?: string | null; onFocusConsumed?: () => void }) {
   const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / DAY)) : range
   const rel = useMemo(() => {
     const end = custom ? custom.to.getTime() : endDate.getTime()
@@ -71,6 +71,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   }
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [graphReady, setGraphReady] = useState(false)
   const selectRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!menuOpen) return
@@ -96,6 +97,25 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   // overflow) the moment the graph is no longer the active page, and return
   // the graph to its idle (non-interactive) state.
   useEffect(() => { if (!active) { setFullscreen(false); graphRef.current?.deactivate() } }, [active])
+  // Deep link from a member profile's "Explore relationships" CTA: once this
+  // page is active with a pending member and the graph engine exists, light the
+  // ego network and fly to them. The page is mounted lazily on this navigation,
+  // so the engine may not exist yet — `graphReady` (set by NetworkGraph's
+  // onReady) holds the deep link until it does. The rAF waits a frame so the
+  // engine's first layout has had a chance to settle.
+  const focusConsumedRef = useRef(onFocusConsumed)
+  focusConsumedRef.current = onFocusConsumed
+  useEffect(() => {
+    if (!focusMemberId || !active || !graphReady) return
+    const raf = requestAnimationFrame(() => {
+      graphRef.current?.activate()
+      setSelected(focusMemberId)
+      graphRef.current?.flyTo(focusMemberId)
+      focusConsumedRef.current?.()
+    })
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMemberId, active, graphReady])
   useEffect(() => {
     if (!filterOpen) return
     const close = (e: MouseEvent) => { if (flowRef.current && !flowRef.current.contains(e.target as Node)) { setFilterOpen(false); setFlowSub(null) } }
@@ -173,7 +193,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
       { label: 'Connected members', info: metricInfo['Connected members'], value: formatNumber(rel.connectedCount), change: { v: connectedPct, range: effDays } },
       { label: 'Weak connected members', info: metricInfo['Weak connected members'], value: formatNumber(rel.lessConnectedCount), change: { v: lessPct, range: effDays } },
       { label: 'Avg. connections per member', info: metricInfo['Avg. connections per member'], value: rel.avgConnections.toFixed(1), change: { v: avgPct, range: effDays } },
-      { label: 'Clusters', info: metricInfo['Clusters'], value: String(rel.clusters.length), change: { v: 0, range: effDays } },
+      { label: 'Clusters', info: metricInfo['Clusters'], value: String(rel.clusters.length) },
     ]}/>
     <Card className={fullscreen ? 'graph-card fullscreen' : 'graph-card'}>
       <div className="graph-head">
@@ -232,7 +252,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
         {memberFilter.cluster !== null && <span className="filter-pill">Cluster {memberFilter.cluster + 1}<button aria-label="Clear cluster filter" onClick={() => applyCluster(null)}><X size={16} /></button></span>}
         {memberFilter.minDegree !== null && <span className="filter-pill">{memberFilter.minDegree}+ connections<button aria-label="Clear connections filter" onClick={() => applyConn(null)}><X size={16} /></button></span>}
       </div>
-      <NetworkGraph ref={graphRef} data={rel} filter={filter} search={search} selected={selected} onSelect={handleSelect} memberFilter={memberFilter} />
+      <NetworkGraph ref={graphRef} data={rel} filter={filter} search={search} selected={selected} onSelect={handleSelect} memberFilter={memberFilter} onReady={() => setGraphReady(true)} />
     </Card>
     <div className="bottom-grid rel-bottom-grid">
       <Card>

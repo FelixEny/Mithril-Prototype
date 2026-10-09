@@ -57,9 +57,10 @@ export type NetworkGraphProps = {
   selected: string | null
   onSelect: (id: string | null) => void
   memberFilter: MemberFilter
+  onReady?: () => void
 }
 
-export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(function NetworkGraph({ data, filter, search, selected, onSelect, memberFilter }, ref) {
+export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(function NetworkGraph({ data, filter, search, selected, onSelect, memberFilter, onReady }, ref) {
   const rootRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [engine, setEngine] = useState<GraphEngine | null>(null)
@@ -72,6 +73,9 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
 
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   const lastPop = useRef<{ data: RelationshipsData; mf: MemberFilter } | null>(null)
   const loadingTimer = useRef<number | null>(null)
@@ -88,6 +92,7 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
     instance.setInteractive(false)
     lastPop.current = { data, mf: { ...memberFilter } }
     setEngine(instance)
+    onReadyRef.current?.()
     // Paint the loading shell first, then drop it once the freshly-built graph
     // has had a frame to render.
     loadingRaf.current = requestAnimationFrame(() => {

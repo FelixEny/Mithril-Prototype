@@ -20,7 +20,7 @@ export default function DashboardSkeleton() {
   return <div aria-hidden="true">
     <div className="card metrics"><div className="card-title metrics-title"><Sk w={150} h={14} /></div><div className="metric-row">{[0, 1, 2, 3].map(k => <div className="metric sk-metric" key={k}><Sk /><Sk /></div>)}</div></div>
     <div className="card heat-card">
-      <div className="heat-main"><div className="card-title"><Sk w={170} h={14} /><Sk w={180} h={36} /></div><div className="heat"><div className="y-labels">{[0, 1, 2, 3, 4, 5, 6].map(i => <Sk className="sk-y-bar" key={i} />)}</div><div className="cells">{cells}</div></div><div className="sk-footer"><div className="sk-swatch-row">{[0, 1, 2, 3, 4, 5, 6].map(i => <Sk className="sk-swatch" key={i} />)}<Sk w={62} h={12} /></div></div></div>
+      <div className="heat-main"><div className="card-title"><Sk w={210} h={14} /></div><div className="heat"><div className="y-labels">{[0, 1, 2, 3, 4, 5, 6].map(i => <Sk className="sk-y-bar" key={i} />)}</div><div className="cells">{cells}</div></div><div className="sk-footer"><div className="sk-swatch-row">{[0, 1, 2, 3, 4, 5, 6].map(i => <Sk className="sk-swatch" key={i} />)}<Sk w={62} h={12} /></div></div></div>
       <div className="peak-panel"><div className="peak-title"><Sk w={126} h={14} /></div>{peakRows}</div>
     </div>
     <div className="eng-grid">
