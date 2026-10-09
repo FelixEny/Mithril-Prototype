@@ -16,12 +16,16 @@ the channel and discussion tables (Engagement).
 
 Top to bottom, in Figma order (`963:55427`):
 
-1. Greeting and date range picker (`PageHeader`)
+1. Greeting (`PageHeader`)
 2. Lead story
 3. Community snapshot (one card, four metric columns)
 4. Community insights (four columns, grey card)
 5. Community strength
 6. Activity tier distribution and Mithril feed
+
+The page has no date range picker: every card reads the same trailing 28 days.
+There are no other surfaces to move independently, so the sections below never
+describe a picker.
 
 ## 3. Greeting
 
@@ -58,9 +62,9 @@ the design rather than rendering it.
 
 ## 4. Lead story
 
-One sentence at 40px Medium on a `924px` measure (`max-width`), with a 24px
-(`--space-2xl`) bottom margin. The measure is Figma's lead-story text box
-(`#963:55476`), not a `ch` figure; `text-wrap: balance` keeps the two-clause
+One sentence at 40px Medium on the full content-column measure (no `max-width`;
+the sentence can span the same width as the metric card below it), with a 24px
+(`--space-2xl`) bottom margin. `text-wrap: balance` keeps the two-clause
 form's two lines near-equal. Its load-bearing figures are set in
 `--content-primary` while the connective grammar stays in `--content-secondary`,
 both at the same Medium weight — the same `{ts2}` (`#6B7280`) / `{ts3}`
@@ -77,7 +81,7 @@ most useful sentence on the page. Half a point is treated as no movement.
 
 ## 5. Community snapshot
 
-One card with a `View chart` link (to the Community snapshot page, see
+One card with an `Explore` link (to the Community snapshot page, see
 `community-snapshot.md`) in its title and four
 metric columns divided by hairlines, each holding a label, a 24px value and a
 `Change` chip. There is no supporting line under the value: the
@@ -86,19 +90,26 @@ period-over-period comparison is entirely the chip, matching the design.
 | Metric | Value | Change |
 | --- | --- | --- |
 | Total members | `totalMembers` (roster as of `end`) | `delta.totalMembers` |
-| Active members | `current.active` | `delta.active` |
 | New members | `joined` | `delta.joined` |
 | Server leaves | `left` | `delta.left`, `invert` |
+| Active member rate | `current.activeRate` | `delta.activeRate` (pp) |
 
-Only Active members carries the info tooltip (`metricInfo['Active members']`), as
-in Figma. All four deltas are percentages against the equally-long prior window,
-computed by `dashboardWindow` from the roster at the window's start (not today's
-roster) and the prior window's joins and leaves.
+Only Active member rate carries the info tooltip (`metricInfo['Active member
+rate']`), matching the tooltip Figma placed on that column. The three count
+deltas are percentages against the equally-long prior window, computed by
+`dashboardWindow` from the roster at the window's start (not today's roster) and
+the prior window's joins and leaves.
 
 Server leaves is the only metric with `invert`: its arrow direction tracks the raw
 number while its colour tracks goodness, so a drop in departures reads as a
 downward green-neutral arrow rather than a downward red one. This behaviour is
 intentional.
+
+Active member rate is `current.activeRate` — `active.size / rosterInWindow`,
+the share of the window's roster that performed at least one qualifying
+activity. It is a rate, so its chip compares in percentage points
+(`delta.activeRate`, `pp: true`) like Reply rate on Engagement, rather than as a
+percentage against the prior window.
 
 ## 6. Community strength
 
@@ -112,19 +123,20 @@ place of the 12px `metrics-title` padding.
 
 ### Basis window
 
-The score is pinned to a **fixed 28-day basis** (`STRENGTH_BASIS_DAYS`) and does
-**not** respond to the date picker's length. An edge only exists once a pair clears
+The score (like every card on the page) reads a **fixed trailing 28-day window**
+(`STRENGTH_BASIS_DAYS`); the Overview has no date picker, so the length is not a
+choice. An edge only exists once a pair clears
 two interactions across two days, so every component is a function of how long you
 watched — on this corpus connectedness reads 10.8 / 15.8 / 24.0 / 35.4 at
 7 / 14 / 28 / 84 days. That is a measurement artifact, not the community changing.
 
-What *is* pinned is the length, not the end date. All presets end at `endDate`, so
-switching 7d → 84d leaves the score byte-identical, while a custom end date does move
-it — that is a genuine 28-day period compared like-for-like against the 28 days
-before it, the same equal-length comparison `strengthDelta` already makes.
+The window ends at `endDate`, and when the trailing days do move that is a genuine
+28-day period compared like-for-like against the 28 days before it, the same
+equal-length comparison `strengthDelta` already makes.
 
-The card titles its own basis (`meta="Trailing 28 days"`), so it reads as deliberate
-rather than broken when the presets change nothing. 28 rather than 30 to match the
+The card titles its own basis (`meta="Trailing 28 days"`), matching the other
+cards on the page.
+28 rather than 30 to match the
 trailing-28-day activity snapshot the donut beside it reports;
 `weeksIn = round(days/7) = 4` at both lengths, so the consistency term is identical.
 
@@ -226,7 +238,10 @@ The link is a sibling of the tinted block, not a child of it. In Figma the
 recommendation box and the link are separate items stacked in the column, so the
 link sits on the white panel rather than on the block's `--surface-secondary`
 fill. `.insight-block` keeps `margin-top:auto` to pin the block to the bottom of
-the column, and the link follows it with the column's own 8px `gap`.
+the column, and the link follows it 12px below (the column's 8px `gap` plus a
+4px `margin-top` on the link itself). The title and detail hold a 4px gap
+inside `.insight-text`; the link's trailing gap to the column edge stays at the
+column's 4px bottom padding.
 
 There is deliberately no big number in the block. The figures already appear in the
 detail sentence, so a number there would spend the most prominent slot on the page
@@ -260,19 +275,17 @@ on the screen whose whole job is to say something, and both structural columns
 have a well-defined value on any window.
 
 The Notable column is worded against the trailing 28 days, because
-`DashboardWindow.tiers` is a 28-day count of the roster at `end` and is not
-recomputed for the selected window. It must never be described as a movement over
-the selected period.
+`DashboardWindow.tiers` is a 28-day count of the roster at `end`. It must never
+be described as a movement over the window.
 
 ### Basis window
 
-Every column is pinned to a fixed **trailing 28-day** basis rather than the
-picker's length, in the same way the strength card below is. `OverviewPage`
-builds it as `dashboardWindow(end − 28d, end)` off the selection's end date
-(`STRENGTH_BASIS_DAYS`), so switching 7d → 84d leaves all four columns
-byte-identical and a custom **end date** moves them as a real equal-length
-comparison. The detail sentences' "against X% in the previous `days`" therefore
-always reads the previous 28 days, and the comparative deltas are 28d-vs-prior-28d.
+Every column reads the page's fixed **trailing 28-day** window
+(`STRENGTH_BASIS_DAYS`), the same window the strength card and the snapshot card
+use. There is no picker to switch lengths against, so the four insight columns
+cannot drift from the metrics above them. The detail sentences' "against X% in
+the previous `days`" therefore always reads the previous 28 days, and the
+comparative deltas are 28d-vs-prior-28d.
 
 ### Navigation
 
@@ -312,7 +325,7 @@ above, because the feed sits in the most prominent remaining position on the pag
 | Icon | Item | Source |
 | --- | --- | --- |
 | Gauge | Share of members who are connected | `relationships().connectedCount` |
-| Speaker | Busiest weekday and hour window | `peaks[0]` |
+| Speaker | Busiest weekday and hour window | `peaks[0]` (ranked by the active-weighted score, with active members alongside) |
 | Lightning | Top trending discussion | `discussionRows[0]` (channel + avatar stack) |
 | Hash | Most active channel | `channelRows[0]` |
 
@@ -357,9 +370,12 @@ Ours is computed from the corpus, so the numbers and phrasing differ by design.
 
 - Lead story membership figures and the Total members metric are the same number.
   The story states movement; the metric states the level.
-- New members and Server leaves are absolute counts for the selected window. Their
-  change chips compare against the prior window and are not derived from the
-  story.
+- New members and Server leaves are absolute counts for the trailing 28 days.
+  Their change chips compare against the prior window and are not derived from
+  the story.
+- Active member rate is the share of the window's roster that was active
+  (`current.activeRate`), the same roster `totalMembers` states, so the two share
+  a denominator. Its chip is read in percentage points.
 - Community strength renders only here. The Relationships page no longer shows the
   card, so there is no second copy to keep in sync.
 - The Opportunity column repeats the voice-only ratio that Engagement surfaces in
@@ -369,9 +385,10 @@ Ours is computed from the corpus, so the numbers and phrasing differ by design.
 
 ## 11. Implementation notes
 
-- `OverviewPage` reads `DashboardWindow` through `dashboard(range)` or
-  `dashboardWindow(custom.from, custom.to)` so a custom range is honoured end to
-  end. It must not hardcode `endDate` as the window's end.
+- `OverviewPage` reads a single fixed window through
+  `dashboard(STRENGTH_BASIS_DAYS)` — there is no date picker, so no `RangeProps`.
+  The window ends at `endDate` because `dashboard` ends there; the page pins the
+  length (trailing 28 days), never the end date.
 - The page is gated on `warm` in `App.tsx`, like Relationships and People. It runs
   the network engine, which must not execute inside another page's first paint.
 - `overviewFindings()` is retained in `src/overview.ts` and documented, but is not

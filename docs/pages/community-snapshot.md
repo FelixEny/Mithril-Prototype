@@ -3,9 +3,9 @@
 ## 1. Page purpose
 
 The Community snapshot is the drill-down behind the Overview's Community
-snapshot card (`View chart`). It answers one question with two charts: **how
+snapshot card (`Explore`). It answers one question with two charts: **how
 large is the roster, and what moved it?** The top chart is the roster over the
-selected range; the bottom chart is the membership flow that produced the net
+trailing 28 days; the bottom chart is the membership flow that produced the net
 change.
 
 It is deliberately shallow: no cohort splits, no activity metrics, no tiers.
@@ -17,7 +17,7 @@ does not restate them.
 Figma node `969:55971`. Top to bottom:
 
 1. Breadcrumb `Overview > Community snapshot` (`mpp-*` styles, first crumb is a
-   back button) with `DateRangePicker` on the right
+   back button)
 2. One `Card` (`.snapshot-card`, radius 12, no card-level padding, no card title)
    containing, in order:
    - `CardTitle` "Total members" (`card-title-no-action`, no action control)
@@ -35,7 +35,7 @@ two charts visually locked to the same x-scale and matches Figma.
 ## 3. Metrics
 
 Values come from the `DashboardWindow` (`w`) that the Overview already computed
-for the selected range, plus `effDays` for the `Change` chip. Nothing is
+for the trailing 28 days, plus `effDays` for the `Change` chip. Nothing is
 recomputed on this page.
 
 | Section | Value | Source |
@@ -77,8 +77,8 @@ Both charts use `membershipSeries(w.start, w.end)` (daily `MembershipPoint`s:
   between, so lefts render below zero in red and joins above in green.
 - 28 day slots: `barCategoryGap="23%"` (Recharts treats the percent as the
   padding on each side of a band, so this renders ~half-band bars — the 20px at
-  28 days that Figma shows — with `maxBarSize={20}` capping the wider spacing at
-  7-day ranges).
+  28 days that Figma shows — with `maxBarSize={20}` capping wider spacing; the
+  page only ever renders the fixed 28-day window, so the cap never binds).
 - Tooltip: shared `.chart-tooltip` shell with `.chart-tooltip-row` rows
   (Joined green dot, Left red dot) and a grey row cursor
   (`cursor={{ fill: 'var(--surface-secondary)' }}`).
@@ -95,7 +95,7 @@ Both charts use `membershipSeries(w.start, w.end)` (daily `MembershipPoint`s:
 
 ## 5. Navigation
 
-- Entry: `View chart` on the Overview Community snapshot card. The Overview
+- Entry: `Explore` on the Overview Community snapshot card. The Overview
   keeps a local `snapshot` flag (`useState`) and renders this page in place of
   its own JSX — same pattern as People → member profile. The sidebar stays on
   Overview; no new `PageKey`, no hash route.

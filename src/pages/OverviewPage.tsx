@@ -1,81 +1,70 @@
 import { useMemo, useState } from 'react'
 import { Gauge, Hash, Lightning, SpeakerHigh } from '@phosphor-icons/react'
-import { dashboard, dashboardWindow, formatNumber } from '../analytics'
+import { dashboard, formatNumber, formatPercent } from '../analytics'
 import { relationships } from '../relationships'
-import { endDate } from '../data'
 import { getMemberAvatar } from '../avatars'
-import { metricInfo } from '../help'
 import { Avatar } from '../components/Avatar'
 import { Card } from '../components/Card'
 import { CardTitle } from '../components/CardTitle'
 import { CommunityInsight } from '../components/CommunityInsight'
-import { DateRangePicker } from '../components/DateRangePicker'
 import { MetricsCard } from '../components/MetricsCard'
 import { PageHeader } from '../components/PageHeader'
 import { strengthDimensions, StrengthCard } from '../components/StrengthCard'
 import { strengthSnapshot, STRENGTH_BASIS_DAYS } from '../relationships'
+import { metricInfo } from '../help'
 import { TierDonut } from '../components/TierDonut'
 import type { PageKey } from '../components/Sidebar'
 import { greeting, overviewStory } from '../overview'
 import { overviewInsights } from '../overview-insights'
 import { buildMithrilFeed, type FeedIcon } from '../overview-feed'
 import { CommunitySnapshotPage } from './CommunitySnapshotPage'
-import type { RangeProps } from './EngagementPage'
-
-const DAY = 86400000
 
 const FEED_ICONS: Record<FeedIcon, typeof Gauge> = { gauge: Gauge, speaker: SpeakerHigh, lightning: Lightning, hash: Hash }
 
-// `onNavigate` is declared here rather than on `RangeProps`: that contract is
-// about the date range, and the insight links are the only thing on this page that
-// navigates, so the other four pages should not have to accept the prop.
-export function OverviewPage({ range, custom, onSelectPreset, onSelectRange, onNavigate }: RangeProps & { onNavigate: (page: PageKey) => void }) {
+export function OverviewPage({ onNavigate }: { onNavigate: (page: PageKey) => void }) {
   const [snapshot, setSnapshot] = useState(false)
-  const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / DAY)) : range
+  const effDays = STRENGTH_BASIS_DAYS
 
+  // The whole page reads one trailing 28-day window. There is no date picker:
+  // the insights, the feed and the strength score are all calibrated for a
+  // single length, so the snapshot card sits on the same window rather than a
+  // page of otherwise incoherent ranges.
   const { w, rel, strength, story, insights, feed } = useMemo(() => {
-    const w = custom ? dashboardWindow(custom.from, custom.to) : dashboard(range)
-    // Deliberately its own fixed basis window rather than `w`: the insights, the
-    // feed and the strength score all read best at one length, so the picker's
-    // length must not reach them. Only a custom end date moves them, which is a
-    // real equal-length comparison.
-    const basis = dashboardWindow(new Date(w.end.getTime() - STRENGTH_BASIS_DAYS * DAY), w.end)
-    const rel = relationships(basis.start.getTime(), basis.end.getTime())
+    const w = dashboard(STRENGTH_BASIS_DAYS)
+    const rel = relationships(w.start.getTime(), w.end.getTime())
     return {
       w,
       rel,
-      // On the same fixed basis: the score is calibrated for one length, so the
-      // picker's length must not reach the gauge either.
       strength: strengthSnapshot(w.end.getTime()),
       story: overviewStory(w),
-      insights: overviewInsights(basis),
-      // The network engine is already running for the `basis` window (the same
-      // window the strength card reads), so the connectedness figure the feed
-      // quotes is read off that same result rather than costing a second pass.
-      feed: buildMithrilFeed(basis, { count: rel.connectedCount, total: basis.totalMembers }),
+      insights: overviewInsights(w),
+      // The network engine is already running for the same window the strength
+      // card reads, so the connectedness figure the feed quotes is read off that
+      // same result rather than costing a second pass.
+      feed: buildMithrilFeed(w, { count: rel.connectedCount, total: w.totalMembers }),
     }
-  }, [range, custom])
+  }, [])
 
   // Read once at render time, so the band the visitor first sees is the band
   // that stays for the session rather than ticking over while the page is open.
   const h = greeting(new Date())
 
-  if (snapshot) return <CommunitySnapshotPage w={w} effDays={effDays} range={range} custom={custom} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} onBack={() => setSnapshot(false)} />
+  if (snapshot) return <CommunitySnapshotPage w={w} effDays={effDays} onBack={() => setSnapshot(false)} />
 
   return <>
-    <PageHeader title={<>{h.text}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange}/>}/>
+    <PageHeader title={<>{h.text}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title"/>
     <p className="lead-story">{story.runs.map((r, i) => r.strong ? <strong key={i}>{r.text}</strong> : <span key={i}>{r.text}</span>)}</p>
     {/* The four metrics sit in one card as columns divided by a hairline rather
         than as four cards: the period-over-period `Change` chip beside each value
         is the whole comparison, so nothing is lost by dropping the supporting
-        lines the four-card version carried. "View chart" drills into the
-        Community snapshot page, which plots the roster and the membership flow
-        across this same range. */}
-    <MetricsCard title="Community snapshot" link="View chart" onClick={() => setSnapshot(true)} stats={[
+        lines the four-card version carried. "Explore" drills into the Community
+        snapshot page, which plots the roster and the membership flow across this
+        same 28-day window. */}
+    <MetricsCard title="Community snapshot" link="Explore" onClick={() => setSnapshot(true)} stats={[
       { label: 'Total members', value: formatNumber(w.totalMembers), change: { v: w.delta.totalMembers, range: effDays } },
-      { label: 'Active members', info: metricInfo['Active members'], value: formatNumber(w.current.active), change: { v: w.delta.active, range: effDays } },
       { label: 'New members', value: formatNumber(w.joined), change: { v: w.delta.joined, range: effDays } },
       { label: 'Server leaves', value: formatNumber(w.left), change: { v: w.delta.left, range: effDays, invert: true } },
+      { label: 'Active member rate', info: metricInfo['Active member rate'], value: formatPercent(w.current.activeRate), change: { v: w.delta.activeRate, pp: true, range: effDays } },
     ]}/>
     <Card className="insights-card">
       <CardTitle className="metrics-title" title="Community insights" meta="Trailing 28 days"/>

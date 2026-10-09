@@ -84,6 +84,9 @@ The design tokens are the implementation system. Figma is the visual reference.
 #### Avatar palette (`--avatar-1..6`)
 System colors used for avatar tinting (initials circles, graph nodes, Dicebear background): Brand Purple `#693CF3`, Green/200 `#009A47`, Blue `#008EFF`, Yellow `#FDAB00`, Grayish Green `#3CAA9F`, Red `#E5484D`. Assigned deterministically per member; single source of truth is `src/avatars.ts`.
 
+#### Vendored avatar images
+Image avatars are served locally so the prototype never depends on a third-party host at runtime: real face photos and Pravatar portraits live under `public/avatars/`, and DiceBear Adventurer portraits are vendored as 128px PNGs under `public/avatars/dicebear/` by `scripts/vendor-dicebear.mjs`. Attribution: **Adventurer** avatar style by Lisa Wischofsky, generated with DiceBear, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ### Semantic Tokens
 
 #### Content
@@ -123,14 +126,15 @@ System colors used for avatar tinting (initials circles, graph nodes, Dicebear b
 - Negative: `Color/Red/200` (`--chart-negative`, negative values such as left members)
 
 #### Heatmap (activity grid)
-- 1: `#CFFCE4`
-- 2: `#9BE6BE`
-- 3: `#7CD7A6`
-- 4: `#5DC88F`
-- 5: `#3EB877`
-- 6: `#20A860`
-- 7: `#017A39`
-- scale-1 (legend start): `#BAF7CF`
+- 1: `#F0F2F4`
+- 2: `#D6F5E4`
+- 3: `#9DE7BF`
+- 4: `#64D89A`
+- 5: `#31C476`
+- 6: `#238B53`
+- 7: `#145231`
+- Legend swatches use the same tokens as the cells (swatch 1 = level 1), so the
+  "Less activity" end of the legend matches the lightest cells in the grid.
 - Intensity thresholds (messages per week per weekday/hour cell — `heatLevel()` in `src/analytics.ts`):
   - 1: ≤ 6
   - 2: ≤ 15
@@ -218,11 +222,18 @@ for text that declares no size of its own. It is not a scale step.
 
 Tracking rule: sizes ≤ 16px use LS −1% (−0.01em); sizes above 16px use LS −2% (−0.02em).
 
+Role tokens break the per-size tracking rule on purpose, the way weight tokens
+break the one-weight-per-size assumption: `--letter-spacing-wordmark`
+(−0.03em) for the Mithril wordmark, and `--letter-spacing-overline` (0.1em)
+for wide-tracked uppercase eyebrow labels (currently the member-profile
+`ACTIVITY` / `DISCORD ROLES` section labels). Prefer these over inventing a
+raw value when a style needs tracking that isn't its size step.
+
 ## Sizes
 
 | Size | Tokens | Step |
 | --- | --- | --- |
-| 10px | `--line-height-10`, `--letter-spacing-10` | `xs-micro` — chart hour labels only |
+| 10px | `--line-height-10`, `--letter-spacing-10` | `xs-micro` — chart hour labels and section overlines (overlines pair it with `--letter-spacing-overline`) |
 | 12px | `--line-height-12`, `--letter-spacing-12` | `xs` |
 | 14px | `--line-height-14`, `--letter-spacing-14` | `sm` |
 | 16px | `--line-height-16`, `--letter-spacing-16` | `md` / card `title` |
@@ -363,3 +374,11 @@ here so the next pass does not "fix" it back.
   `--surface-primary` treatment. Implemented as `.insights-card` +
   `.insights-panel`; keep the nesting if the card is revisited, and keep
   `CardTitle` in its standard position above the panel rather than inside it.
+- **Member profile → profile card.** The Figma "User Profile Card" carries a
+  resting shadow even though elevation rules reserve shadows for floating
+  surfaces. Implemented as `.card.mpp-profile` (doubled selector, so it beats
+  the base `.card` ring declared later in the cascade in `tokens.css` — same
+  trick as `.card.insights-card`) with the `--border-modal` outside ring +
+  `--shadow-overlay`, matching the Figma stroke (`rgba(17,25,40,.08)`) and the
+  documented ring+shadow pattern for shadow-carrying white surfaces; do not
+  "fix" it back to a stroke-only card.

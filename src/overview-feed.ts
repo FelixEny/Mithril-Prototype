@@ -75,7 +75,7 @@ export function buildMithrilFeed(w: DashboardWindow, connected: { count: number;
       id: 'peak',
       icon: 'speaker',
       headline: `Busiest on ${DAY_NAMES[peak.weekday]} ${span}`,
-      supporting: `${peak.magnitude.toFixed(1)}× the hourly average, at ${peak.avg.toFixed(1)} messages per hour`,
+      supporting: `${peak.relative.toFixed(1)}× the hourly average, averaging ${formatNumber(Math.round(peak.avgActive))} active members`,
     })
   }
 

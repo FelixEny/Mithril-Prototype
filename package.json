@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc -b && vite build",
+		"test": "node --test src/people-filters.test.ts",
 		"preview": "vite preview"
 	},
 	"dependencies": {
@@ -20,6 +21,7 @@
 		"sigma": "^3.0.3"
 	},
 	"devDependencies": {
+		"@types/node": "^26.6.4",
 		"@types/react": "^19.2.18",
 		"@types/react-dom": "^19.2.5",
 		"@vitejs/plugin-react": "^6.1.1",

@@ -2,13 +2,10 @@ import { useMemo } from 'react'
 import { CaretRight } from '@phosphor-icons/react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatNumber, membershipSeries, type DashboardWindow, type MembershipPoint } from '../analytics'
-import { endDate } from '../data'
 import { Card } from '../components/Card'
 import { CardTitle } from '../components/CardTitle'
 import { Change } from '../components/Change'
 import { ChartTooltip } from '../components/ChartTooltip'
-import { DateRangePicker } from '../components/DateRangePicker'
-import type { RangeProps } from './EngagementPage'
 
 const NICE = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
 
@@ -61,7 +58,7 @@ function FlowTooltip({ active, payload }: { active?: boolean; payload?: Array<{ 
   </div>
 }
 
-export function CommunitySnapshotPage({ w, effDays, range, custom, onSelectPreset, onSelectRange, onBack }: { w: DashboardWindow; effDays: number } & RangeProps & { onBack: () => void }) {
+export function CommunitySnapshotPage({ w, effDays, onBack }: { w: DashboardWindow; effDays: number; onBack: () => void }) {
   const points = useMemo(() => membershipSeries(w.start, w.end), [w])
   const flow = useMemo(() => points.map((p) => ({ ...p, negLeft: -p.left })), [points])
   const roster = useMemo(() => rosterAxis(points.reduce((m, p) => Math.max(m, p.roster), 0)), [points])
@@ -78,7 +75,6 @@ export function CommunitySnapshotPage({ w, effDays, range, custom, onSelectPrese
         <CaretRight size={16} className="mpp-crumb-caret" />
         <span className="mpp-crumb-current">Community snapshot</span>
       </div>
-      <DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />
     </div>
     <Card className="snapshot-card">
       <CardTitle title="Total members" />
