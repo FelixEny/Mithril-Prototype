@@ -127,7 +127,11 @@ export default function App() {
   // class lives on <body> so it survives page switches (scroll position is
   // preserved) and only touches headers that opt in via `collapsible`.
   useEffect(() => {
-    const onScroll = () => document.body.classList.toggle('header-compact', window.scrollY > 32)
+    const onScroll = () => {
+      const y = window.scrollY
+      if (y > 64) document.body.classList.add('header-compact')
+      else if (y < 24) document.body.classList.remove('header-compact')
+    }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
