@@ -274,7 +274,7 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange, peopl
   return selectedId ? (
     <MemberProfilePage memberId={selectedId} onBack={() => setSelectedId(null)} onExplore={onExploreMember ? () => onExploreMember(selectedId) : undefined} range={range} custom={custom} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />
   ) : <>
-    <PageHeader collapsible title="People" subtitle="Find and understand members of your community" action={
+    <PageHeader collapsible headerClassName="header-no-lift" title="People" subtitle="Find and understand members of your community" action={
       <div className="ph-actions">
         <button className="people-export" type="button"><DownloadSimple size={20} />Export</button>
         {activeFilterCount > 0 && (
