@@ -85,14 +85,15 @@ test('the @everyone role is excluded from counts', () => {
 
 // ---------------------------------------------------------------------------
 // Real corpus (src/data/members.json — actual role assignments, nothing
-// fabricated; bots excluded exactly like peopleRows() builds the table)
+// fabricated; bots and members who left excluded exactly like peopleRows()
+// builds the table: the roster at the data end)
 // ---------------------------------------------------------------------------
 
-interface RawMember { id: string; displayName: string; bot?: boolean; roles?: string[] }
+interface RawMember { id: string; displayName: string; bot?: boolean; roles?: string[]; leftAt?: string | null }
 
 const raw: RawMember[] = JSON.parse(readFileSync(new URL('./data/members.json', import.meta.url), 'utf8'))
 const rows: FilterableRow[] = raw
-  .filter((m) => !m.bot)
+  .filter((m) => !m.bot && !m.leftAt)
   .map((m) => ({
     id: m.id,
     name: m.displayName,

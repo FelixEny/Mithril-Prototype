@@ -1,4 +1,4 @@
-import { startDate, endDate, members, roles, messages, voiceSessions, reactions } from './data'
+import { startDate, endDate, members, roles, messages, voiceSessions, reactions, presentAt } from './data'
 import type { Role } from './data'
 import { activitySnapshot, type ActivitySnapshot, type ActivityTier } from './analytics'
 import { influenceEngine } from './relationships'
@@ -15,11 +15,6 @@ export interface PeopleRow {
   roleIds: string[]
   roles: Role[]
   joinedAtMs: number
-  // When the member left the server, or -Infinity for anyone still here. Carried
-  // on the row so the People table can distinguish a quiet member from a
-  // departed one without re-deriving it, and so profiles and the Overview's
-  // membership story read the same departure date.
-  leftAtMs: number
   lastActiveAtMs: number
   series: number[]
 }
@@ -63,8 +58,12 @@ export function peopleRows(): PeopleRow[] {
   const snap = activitySnapshot(endDate)
   const network = influenceEngine().memberInfo
 
+  // The table is the roster at the data end, same line every other surface
+  // draws: bots are out (presentAt excludes them), and so is anyone who has
+  // left. Departures are the Overview / Community Snapshot's story — a
+  // departed member with no chip or grey-out would just read as quiet.
   cache = members
-    .filter((m) => !m.bot)
+    .filter((m) => presentAt(m, endDate))
     .map((m) => {
       const s = snap.get(m.id)
       return {
@@ -76,7 +75,6 @@ export function peopleRows(): PeopleRow[] {
         roleIds: m.roles ?? [],
         roles: (m.roles ?? []).map(roleOf),
         joinedAtMs: m.joinedAt.getTime(),
-        leftAtMs: m.leftAt ? m.leftAt.getTime() : -Infinity,
         lastActiveAtMs: s?.lastActiveAtMs ?? -Infinity,
         series: counts.get(m.id) ?? [],
       }

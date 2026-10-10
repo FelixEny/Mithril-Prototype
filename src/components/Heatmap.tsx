@@ -28,9 +28,9 @@ export const HeatmapCard = memo(function HeatmapCard({ heat }: { heat: HeatCell[
           const level = heatActiveLevel(cell.active)
           return <button type="button" key={`${cell.weekday}-${cell.hour}`} style={{ background: `var(--heat-${level})` }} aria-label={`${dayLabels[cell.weekday]} ${hourLabel(cell.hour)}: ${formatNumber(cell.active)} active members, ${formatNumber(cell.messages)} messages`} onMouseEnter={(e) => heatMove(e, cell)} onMouseMove={(e) => heatMove(e, cell)} onMouseLeave={() => setHover(null)} />
         })}<div className="hours">{Array.from({ length: 12 }, (_, i) => <span key={i}>{hourLabel(i * 2)}</span>)}</div></div>
+        {hover && <span className="heat-tooltip" style={{ left: Math.max(76, Math.min(hover.x, (heatRef.current?.offsetWidth ?? 900) - 76)), top: hover.y, transform: hover.y > 44 ? 'translate(-50%, calc(-100% - 10px))' : 'translate(-50%, 12px)' }}><div className="chart-tooltip"><span className="chart-tooltip-label">{dayLabels[hover.weekday]} · {hourLabel(hover.hour)}</span><span className="chart-tooltip-row">Active members<b>{formatNumber(hover.active)}</b></span><span className="chart-tooltip-row">Messages<b>{formatNumber(hover.messages)}</b></span></div></span>}
       </div>
       <div className="heat-footer"><div className="activity-legend"><span>Less activity</span><span className="heat-scale"><i /><i /><i /><i /><i /><i /><i /></span><span>More activity</span></div></div>
-      {hover && <span className="heat-tooltip" style={{ left: Math.max(76, Math.min(hover.x, (heatRef.current?.offsetWidth ?? 900) - 76)), top: hover.y, transform: hover.y > 44 ? 'translate(-50%, calc(-100% - 10px))' : 'translate(-50%, 12px)' }}><div className="chart-tooltip"><span className="chart-tooltip-label">{dayLabels[hover.weekday]} · {hourLabel(hover.hour)}</span><span className="chart-tooltip-row">Active members<b>{formatNumber(hover.active)}</b></span><span className="chart-tooltip-row">Messages<b>{formatNumber(hover.messages)}</b></span></div></span>}
     </div>
   )
 })

@@ -5,8 +5,10 @@ Locked product definitions for the People page, including the segment model.
 ## 1. Page purpose
 
 People answers "who is in this community?" — a browsable, searchable table of
-all members that can be filtered down and saved as a **segment** (a named,
-reusable filtered list).
+every member still on the server at the data end. Members who left are
+excluded; departures are reported on Overview and Community Snapshot. The
+table can be filtered down and saved as a **segment** (a named, reusable
+filtered list).
 
 ## 2. Table columns
 
@@ -23,8 +25,8 @@ Figma (v2, "People page" frames) defines these columns:
 | **Activity graph** | Compact per-period activity sparkline for the member. |
 
 Sorting, search, and pagination apply (Influence is sortable and filterable by
-minimum score). Only member-generated activity counts; bots are excluded from
-the table and analytics.
+minimum score). Only member-generated activity counts; bots and members who
+have left are excluded from the table and analytics.
 
 The People page has **no date-range picker**. Every value is fixed relative to
 the data end ("now") and does not change with the dashboard's selected period —
