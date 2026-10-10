@@ -188,7 +188,7 @@ export function RelationshipsPage({ range, custom, onSelectPreset, onSelectRange
   // are dropped while a selection is active.
   const selInfo = selected ? rel.memberInfo.get(selected) : undefined
   return <>
-    <PageHeader title="Relationships" subtitle="Understand how members connect, influence and bridge your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
+    <PageHeader collapsible title="Relationships" subtitle="Understand how members connect, influence and bridge your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
     <MetricsCard title="Network summary" stats={[
       { label: 'Connected members', info: metricInfo['Connected members'], value: formatNumber(rel.connectedCount), change: { v: connectedPct, range: effDays } },
       { label: 'Weak connected members', info: metricInfo['Weak connected members'], value: formatNumber(rel.lessConnectedCount), change: { v: lessPct, range: effDays } },

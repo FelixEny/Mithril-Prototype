@@ -29,10 +29,10 @@ const SortBtn = ({ label, active, dir, onClick }: { label: string; active: boole
 
 function Sparkline({ series }: { series: number[] }) {
   const max = Math.max(0, ...series)
-  if (max === 0) return <span className="pt-spark-empty">—</span>
   const W = 120
   const H = 15
   const pad = 1
+  if (max === 0) return <svg className="pt-spark" width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="var(--chart-superuser)" strokeWidth={1} points={`0,${H - pad} ${W},${H - pad}`} /></svg>
   const pts = series.length === 1
     ? `${W / 2},${H - pad}`
     : series.map((v, i) => `${(i / (series.length - 1)) * W},${H - pad - (v / max) * (H - pad * 2)}`).join(' ')
@@ -274,7 +274,7 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange, peopl
   return selectedId ? (
     <MemberProfilePage memberId={selectedId} onBack={() => setSelectedId(null)} onExplore={onExploreMember ? () => onExploreMember(selectedId) : undefined} range={range} custom={custom} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />
   ) : <>
-    <PageHeader title="People" subtitle="Find and understand members of your community" action={
+    <PageHeader collapsible title="People" subtitle="Find and understand members of your community" action={
       <div className="ph-actions">
         <button className="people-export" type="button"><DownloadSimple size={20} />Export</button>
         {activeFilterCount > 0 && (
@@ -381,9 +381,7 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange, peopl
 
       {total === 0
         ? <div className="pt-empty"><span>No members match your filters.</span><button type="button" onClick={() => { setSearch(''); clearFilters(); setSegmentId('all') }}>Clear filters</button></div>
-        : <div className="people-table-wrap">
-          <div className={`people-table${showWatch ? ' watch' : ''}`}>
-            <div className="pt-head">
+        : <><div className={`people-shead${showWatch ? ' watch' : ''}`}>
               <div className="pt-cell pt-check"><button type="button" className={`pe-checkbox${somePageSel ? ' on' : ''}`} aria-label={allPageSel ? 'Deselect all on this page' : 'Select all on this page'} aria-pressed={allPageSel} onClick={toggleAll}>{somePageSel && <Check size={16} weight="bold" />}</button></div>
               <div className="pt-cell">{showWatch ? <span className="pt-sort-inactive">Member</span> : <SortBtn label="Member" active={sortKey === 'name'} dir={sortDir} onClick={() => onSort('name')} />}</div>
               {showWatch ? <div className="pt-cell"><span className="pt-sort-inactive">Change</span></div> : <div className="pt-cell"><span className="pt-sort-inactive">Activity level</span></div>}
@@ -392,7 +390,9 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange, peopl
               {!showWatch && <div className="pt-cell"><SortBtn label="Joined" active={sortKey === 'joinedAt'} dir={sortDir} onClick={() => onSort('joinedAt')} /></div>}
               {!showWatch && <div className="pt-cell"><SortBtn label="Last activity" active={sortKey === 'lastActive'} dir={sortDir} onClick={() => onSort('lastActive')} /></div>}
               <div className="pt-cell"><span className="pt-sort-inactive">Activity graph</span></div>
-            </div>
+          </div>
+          <div className="people-table-wrap">
+            <div className={`people-table${showWatch ? ' watch' : ''}`}>
             {visibleRows.map((r) => {
               const picked = selected.has(r.id)
               const w = showWatch ? watchMap.get(r.id) : undefined
@@ -413,8 +413,9 @@ export function PeoplePage({ range, custom, onSelectPreset, onSelectRange, peopl
                 <div className="pt-cell"><Sparkline series={r.series} /></div>
               </div>
             })}
+            </div>
           </div>
-        </div>}
+        </>}
 
       {total > 0 && <div className="people-pagination">
         <div className="pp-left">

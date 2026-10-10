@@ -57,7 +57,7 @@ export function EngagementPage({ range, custom, onSelectPreset, onSelectRange, o
   const watch = membersToWatch(d.start, d.end)
   const discussions = d.discussionRows
   const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / 86400000)) : range
-  return <><PageHeader title="Engagement" subtitle="Understand how members participate in your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
+  return <><PageHeader collapsible title="Engagement" subtitle="Understand how members participate in your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
   <MetricsCard title="Engagement depth" link="View chart" href="#" stats={[
     { label: 'Messages', info: metricInfo['Messages'], value: formatNumber(d.current.messages), change: { v: d.delta.messages, range: effDays } },
     { label: 'Reply rate', info: metricInfo['Reply rate'], value: formatPercent(d.current.replyRate), change: { v: d.delta.replyRate, pp: true, range: effDays } },

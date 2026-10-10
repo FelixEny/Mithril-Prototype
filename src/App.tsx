@@ -122,6 +122,16 @@ export default function App() {
   useEffect(() => {
     setVisited(v => (v.has(page) ? v : new Set(v).add(page)))
   }, [page])
+  // Sticky-collapsible page headers (Engagement/Relationships/People) pin and
+  // compact in lockstep once the window scrolls past main's top padding. The
+  // class lives on <body> so it survives page switches (scroll position is
+  // preserved) and only touches headers that opt in via `collapsible`.
+  useEffect(() => {
+    const onScroll = () => document.body.classList.toggle('header-compact', window.scrollY > 32)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   const rangeProps: RangeProps = { range, custom, onSelectPreset: (d) => { setRange(d); setCustom(null) }, onSelectRange: (from, to) => setCustom({ from, to }) }
   const peopleProps: RangeProps = { ...rangeProps, peopleWatch, onClearWatch: () => setPeopleWatch(null) }
   if (bench || isBench()) {
