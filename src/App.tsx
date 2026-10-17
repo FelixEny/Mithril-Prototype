@@ -1,8 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Sidebar, PageKey } from './components/Sidebar'
-import { PageHeader } from './components/PageHeader'
-import DashboardSkeleton from './components/DashboardSkeleton'
-import { Sk } from './components/Skeleton'
+import { PageSkeleton, BenchSkeleton } from './components/PageSkeleton'
 import { loadData } from './data'
 import { RangeDays } from './analytics'
 import { DEFAULT_RANGE } from './ranges'
@@ -25,13 +23,6 @@ const PeoplePage = lazy(() => import('./pages/PeoplePage').then((m) => ({ defaul
 // route, so it is code-split into its own chunk.
 const BenchmarkPage = lazy(() => import('./pages/BenchmarkPage'))
 
-const subtitles: Record<PageKey, string> = {
-  Overview: 'Understand the overall health of your community',
-  Engagement: 'Understand how members participate in your community',
-  Relationships: 'Understand how members connect, influence and bridge your community',
-  People: 'Find and understand members of your community',
-}
-
 // Minimal hash routing: the app's default page is Overview, but a fragment
 // (#/engagement, #/relationships, #/people, ...) selects the initial page so
 // individual pages can be smoke-tested headlessly and deep-linked. #/bench (and
@@ -48,26 +39,16 @@ const hashPage = (): PageKey => {
 
 const isBench = () => window.location.hash.startsWith('#/bench')
 
-// Suspense fallback for a lazily-loaded page. Reuses the skeleton primitives
-// and card classes the app already ships, so no new visuals are introduced.
-function PageFallback() {
-  return (
-    <section className="page-panel" aria-busy="true">
-      <div className="card metrics"><div className="card-title metrics-title"><Sk w={150} h={14} /></div><div className="metric-row">{[0, 1, 2, 3].map(k => <div className="metric sk-metric" key={k}><Sk /><Sk /></div>)}</div></div>
-      <div className="card"><div className="card-title"><Sk w={160} h={14} /></div><div className="sk-chart-area"><div className="sk-bars">{Array.from({ length: 12 }, (_, i) => <span className="sk sk-bar" key={i} />)}</div><Sk className="sk-axis" /></div></div>
-    </section>
-  )
-}
-
 // A page panel is only mounted once its page has been visited (or is the
 // active page); afterwards it stays mounted, hidden, so the page keeps its
 // state across navigation. Deferred pages never mount, fetch chunks, or run
-// their engines just because they exist in the nav.
-function PagePanel({ active, show, children }: { active: boolean; show: boolean; children: ReactNode }) {
+// their engines just because they exist in the nav. `page` picks the skeleton
+// that mirrors the page this panel hosts while its chunk loads.
+function PagePanel({ page, active, show, children }: { page: PageKey; active: boolean; show: boolean; children: ReactNode }) {
   if (!show) return null
   return (
     <section className="page-panel" hidden={!active}>
-      <Suspense fallback={<PageFallback />}>{children}</Suspense>
+      <Suspense fallback={<PageSkeleton page={page} />}>{children}</Suspense>
     </section>
   )
 }
@@ -85,13 +66,13 @@ export default function App() {
     setPage(p)
     window.history.replaceState(null, '', `#/${p.toLowerCase()}`)
   }
-  const openSegmentInPeople = (segmentId: string) => {
-    setFocusSegment(segmentId)
-    navigate('People')
-  }
   const exploreMember = (memberId: string) => {
     setFocusMember(memberId)
     navigate('Relationships')
+  }
+  const openSegmentInPeople = (segmentId: string) => {
+    setFocusSegment(segmentId)
+    navigate('People')
   }
   useEffect(() => {
     const onHash = () => {
@@ -139,15 +120,15 @@ export default function App() {
   }, [])
   const rangeProps: RangeProps = { range, custom, onSelectPreset: (d) => { setRange(d); setCustom(null) }, onSelectRange: (from, to) => setCustom({ from, to }) }
   if (bench || isBench()) {
-    return <ToastProvider><Suspense fallback={<div className="app"><main aria-busy="true"><DashboardSkeleton /></main></div>}><BenchmarkPage /></Suspense><Toaster /></ToastProvider>
+    return <ToastProvider><Suspense fallback={<BenchSkeleton />}><BenchmarkPage /></Suspense><Toaster /></ToastProvider>
   }
   const app: ReactNode = !ready
-    ? <div className="app"><Sidebar active={page} onNavigate={navigate} /><main aria-busy="true"><PageHeader title={page} subtitle={subtitles[page]} /><DashboardSkeleton /></main></div>
+    ? <div className="app"><Sidebar active={page} onNavigate={navigate} /><main aria-busy="true"><PageSkeleton page={page} /></main></div>
     : <div className="app"><Sidebar active={page} onNavigate={navigate} /><main>
-        <PagePanel active={page === 'Overview'} show={visited.has('Overview') || page === 'Overview'}><OverviewPage onNavigate={navigate} /></PagePanel>
-        <PagePanel active={page === 'Engagement'} show={visited.has('Engagement') || page === 'Engagement'}><EngagementPage {...rangeProps} onOpenSegmentInPeople={openSegmentInPeople} /></PagePanel>
-        <PagePanel active={page === 'Relationships'} show={visited.has('Relationships') || page === 'Relationships'}><RelationshipsPage {...rangeProps} active={page === 'Relationships'} focusMemberId={focusMember} onFocusConsumed={() => setFocusMember(null)} /></PagePanel>
-        <PagePanel active={page === 'People'} show={visited.has('People') || page === 'People'}><PeoplePage {...rangeProps} focusSegmentId={focusSegment} onFocusSegmentConsumed={() => setFocusSegment(null)} onExploreMember={exploreMember} /></PagePanel>
+        <PagePanel page="Overview" active={page === 'Overview'} show={visited.has('Overview') || page === 'Overview'}><OverviewPage onNavigate={navigate} /></PagePanel>
+        <PagePanel page="Engagement" active={page === 'Engagement'} show={visited.has('Engagement') || page === 'Engagement'}><EngagementPage {...rangeProps} onOpenSegmentInPeople={openSegmentInPeople} /></PagePanel>
+        <PagePanel page="Relationships" active={page === 'Relationships'} show={visited.has('Relationships') || page === 'Relationships'}><RelationshipsPage {...rangeProps} active={page === 'Relationships'} focusMemberId={focusMember} onFocusConsumed={() => setFocusMember(null)} /></PagePanel>
+        <PagePanel page="People" active={page === 'People'} show={visited.has('People') || page === 'People'}><PeoplePage {...rangeProps} focusSegmentId={focusSegment} onFocusSegmentConsumed={() => setFocusSegment(null)} onExploreMember={exploreMember} /></PagePanel>
       </main></div>
   return <ToastProvider>{app}<Toaster /></ToastProvider>
 }
