@@ -9,6 +9,10 @@ import voiceSessionsUrl from './voice-sessions.json?url'
 import schemaUrl from './schema.json?url'
 import segmentsUrl from './segments.json?url'
 import communityUrl from './community.json?url'
+import workspacesUrl from './workspaces.json?url'
+import gitcoinLogo from '../assets/gitcoin-logo.png'
+import codmLogo from '../assets/codm-misfits-logo.png'
+import designersLogo from '../assets/designers-dao-logo.png'
 import type { CompareOp, InfluenceFilter } from '../people-filters'
 
 export type Member = { id: string; name: string; username?: string; joinedAt: Date; bot?: boolean; archetype?: string; roles?: string[]; leftAt: Date | null }
@@ -19,6 +23,8 @@ export type VoiceSession = { memberId: string; at: Date; minutes: number }
 export type Conversation = { id: string; channelId: string; text: string }
 export type Reply = { messageId: string; memberId: string; at: Date }
 export type Reaction = { messageId: string; memberId: string; at: Date }
+
+export type Workspace = { id: string; name: string; email: string; role?: string; owner?: string; active: boolean; logo: string }
 
 // Segments — saved filtered lists. Dynamic segments store criteria evaluated
 // at render time; static segments store explicit member ids.
@@ -66,6 +72,7 @@ export let voiceSessions: VoiceSession[] = []
 export let replies: Reply[] = []
 export let reactions: Reaction[] = []
 export let segments: Segment[] = []
+export let workspaces: Workspace[] = []
 export type Community = { id: string; name: string; platform: string; timezone: string; createdAt: Date; memberCount: number; description?: string }
 type RawCommunity = { id: string; name: string; platform: string; timezone: string; createdAt: string; memberCount: number; description?: string }
 export let community: Community = { id: '', name: 'Community', platform: '', timezone: '', createdAt: new Date(0), memberCount: 0, description: '' }
@@ -77,8 +84,8 @@ const loadJson = async (url: string) => {
 }
 
 export async function loadData(): Promise<void> {
-  const [channelsSrc, membersSrc, messagesSrc, reactionsSrc, repliesSrc, rolesSrc, threadsSrc, voiceSrc, schemaSrc, segmentsSrc, communitySrc] = await Promise.all([
-    loadJson(channelsUrl), loadJson(membersUrl), loadJson(messagesUrl), loadJson(reactionsUrl), loadJson(repliesUrl), loadJson(rolesUrl), loadJson(threadsUrl), loadJson(voiceSessionsUrl), loadJson(schemaUrl), loadJson(segmentsUrl), loadJson(communityUrl),
+  const [channelsSrc, membersSrc, messagesSrc, reactionsSrc, repliesSrc, rolesSrc, threadsSrc, voiceSrc, schemaSrc, segmentsSrc, communitySrc, workspacesSrc] = await Promise.all([
+    loadJson(channelsUrl), loadJson(membersUrl), loadJson(messagesUrl), loadJson(reactionsUrl), loadJson(repliesUrl), loadJson(rolesUrl), loadJson(threadsUrl), loadJson(voiceSessionsUrl), loadJson(schemaUrl), loadJson(segmentsUrl), loadJson(communityUrl), loadJson(workspacesUrl),
   ])
   const repliesTo = (repliesSrc as RawReply[]).reduce((m, r) => m.add(r.messageId), new Set<string>())
   const reactionAgg = (reactionsSrc as RawReaction[]).reduce((m, r) => {
@@ -115,6 +122,16 @@ export async function loadData(): Promise<void> {
   segments = segmentsSrc as Segment[]
   const cSrc = communitySrc as RawCommunity
   community = { ...cSrc, createdAt: at(cSrc.createdAt) }
+  const wsSrc = workspacesSrc as any[]
+  workspaces = wsSrc.map((w) => ({
+    id: w.id,
+    name: w.name,
+    email: w.email,
+    role: w.role,
+    owner: w.owner,
+    active: w.active === true,
+    logo: w.id === 'ws_gitcoin' ? gitcoinLogo : w.id === 'ws_codm' ? codmLogo : designersLogo,
+  }))
 }
 
 // ---------------------------------------------------------------------------

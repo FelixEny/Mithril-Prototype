@@ -12,6 +12,7 @@ import { PageHeader } from '../components/PageHeader'
 import { strengthDimensions, StrengthCard } from '../components/StrengthCard'
 import { strengthSnapshot, STRENGTH_BASIS_DAYS } from '../relationships'
 import { metricInfo } from '../help'
+import { workspaces } from '../data'
 import { TierDonut } from '../components/TierDonut'
 import type { PageKey } from '../components/Sidebar'
 import { greeting, overviewStory } from '../overview'
@@ -48,10 +49,17 @@ export function OverviewPage({ onNavigate }: { onNavigate: (page: PageKey) => vo
   // Read once at render time, so the band the visitor first sees is the band
   // that stays for the session rather than ticking over while the page is open.
   const h = greeting(new Date())
+  // The greeting is addressed to the community manager, so it carries their
+  // name. The prototype has no account model, so the name is read from the
+  // active workspace's `owner` field rather than from a signed-in user. Read
+  // once so it stays fixed for the session even if the workspace switch in the
+  // sidebar flips the active flag.
+  const owner = useMemo(() => workspaces.find((w) => w.active)?.owner, [])
+
   if (snapshot) return <CommunitySnapshotPage onBack={() => setSnapshot(false)} />
 
   return <>
-    <PageHeader title={<>{h.text}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title"/>
+    <PageHeader title={<>{h.text}{owner ? `, ${owner}` : ''}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title"/>
     <p className="lead-story">{story.runs.map((r, i) => r.strong ? <strong key={i}>{r.text}</strong> : <span key={i}>{r.text}</span>)}</p>
     {/* The four metrics sit in one card as columns divided by a hairline rather
         than as four cards: the period-over-period `Change` chip beside each value

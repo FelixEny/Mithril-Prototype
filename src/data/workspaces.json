@@ -1,0 +1,5 @@
+[
+  { "id": "ws_designers", "name": "Designers Dao", "email": "Davekoz@gmail.com", "role": "Owner", "owner": "Dave", "active": true },
+  { "id": "ws_gitcoin", "name": "Gitcoin", "email": "Davekoz@gitcoin.com", "role": "Owner", "active": false },
+  { "id": "ws_codm", "name": "CODM misfits", "email": "Davekoz@gmail.com", "role": "Admin", "active": false }
+]
