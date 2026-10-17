@@ -83,6 +83,7 @@ If fewer than two weeks are available, do not show a week-consistency claim. Do 
 | --- | --- | --- |
 | **Channel Messages** | Total member-generated messages in a channel during the selected period. | Primary ranking metric. |
 | **Channel Active Members** | Unique members who participated in a channel during the selected period. | Supporting context. |
+| **Channel Message Change** | Messages in the selected period vs messages in the equally-long prior period, as a percentage change. | Follows the date picker. Renders as an em dash when the prior period has no messages for that channel (no baseline). |
 
 Preferred UI label: **Most active channels**. Rank by message volume.
 
@@ -163,3 +164,23 @@ Proposed guardrail: at least 10 meaningful interactions and 3 unique participant
 - Active members by day & time follows the selected date range and aggregates it into weekday/hour patterns; cell colors follow Active Members, while message volume is carried on the cell for the tooltip and peak scoring.
 - Peak windows and the relative indicator share one normalized active-weighted score with the underlying heatmap data and observation period; they are interpretation layers attached to the heatmap, not standalone features.
 - Voice participation counts toward Active Members and activity days, while voice-specific metrics expose voice usage separately.
+
+## 13. Members to watch
+
+The Members to watch card highlights members whose participation shifted meaningfully in the selected period — tier moves and notable rises or drops, ranked by a blended score and capped at 5 rows so the card stays a glanceable signal rather than a list.
+
+The card's **Create a segment** action opens the static-segment creation dialog with the name prefilled to a window-unique recommendation (`Members to watch – <window end date>`). Confirming creates a **static segment** holding exactly those members — static because the membership is this ranked list, not a live criteria rule. The segment also records the window it was created for (`watchWindow`). A success toast offers a **View in people page** action that jumps to People with the new segment selected.
+
+On People, a segment carrying `watchWindow` renders in **watch mode**: the table swaps to the watch columns (Member, **Change**, Activity level, Activity graph) and orders rows by the original watch ranking, so the CM can still see *why* each member made the list — tier moves and rises/drops included. The Change stories are reproduced by re-running `membersToWatch` on the stored window, not snapshotted into the segment. Members added to the segment later trail the ranked list with an em dash in the Change cell.
+
+## 14. Top active members
+
+The Top active members card sits beside Members to watch and lists the five busiest members in the selected period, ranked by message volume. It follows the date picker like the other period-based cards.
+
+| Metric | Definition / calculation | Notes |
+| --- | --- | --- |
+| **Messages** | Member-generated messages sent by the member during the selected period. | Replies are messages and are included. Primary ranking metric. |
+| **Active days** | Distinct days in the period on which the member performed qualifying activity (sent a message, sent a reaction, or participated in voice). | Same qualifying-activity definition as everywhere else (section 2). Capped at the period's day count so the value can never exceed the range shown in the picker. |
+| **Channels** | Distinct channels in which the member sent at least one message during the selected period. | Mirrors the channel-breadth tally used by the Members to watch engine. |
+
+Roster rules match Members to watch: bots and members who left before the period end never qualify, and the list is deterministic (stable across reloads). Ties break on active days, then member id. The list is capped at 5 rows so the card stays glanceable. Implementation: `topActiveMembers(start, end)` in `src/analytics.ts`, rendered with the shared card-table styling used by the other Engagement tables.

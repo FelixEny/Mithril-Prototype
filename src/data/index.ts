@@ -9,7 +9,7 @@ import voiceSessionsUrl from './voice-sessions.json?url'
 import schemaUrl from './schema.json?url'
 import segmentsUrl from './segments.json?url'
 import communityUrl from './community.json?url'
-import type { RoleCountOp } from '../people-filters'
+import type { CompareOp, InfluenceFilter } from '../people-filters'
 
 export type Member = { id: string; name: string; username?: string; joinedAt: Date; bot?: boolean; archetype?: string; roles?: string[]; leftAt: Date | null }
 export type Role = { id: string; name: string; color: string }
@@ -31,10 +31,13 @@ export type SegmentCriteria = {
   minInfluence?: number
   joinedWithinDays?: number
   joinedBeforeDays?: number
+  // Influence score conditions: shared { op, value } operators (0–100) or an
+  // inclusive custom range { from, to } (also 0–100).
+  influence?: InfluenceFilter
   // Compared against the member's unique role count (@everyone excluded).
-  roleCount?: { op: RoleCountOp; value: number }
+  roleCount?: { op: CompareOp; value: number }
 }
-export type Segment = { id: string; name: string; kind: 'static' | 'dynamic'; builtIn?: boolean; description?: string; criteria?: SegmentCriteria; memberIds?: string[] }
+export type Segment = { id: string; name: string; kind: 'static' | 'dynamic'; builtIn?: boolean; description?: string; criteria?: SegmentCriteria; memberIds?: string[]; watchWindow?: { start: string; end: string } }
 
 // The community lives in Africa/Lagos (UTC+1 during the data window). Every
 // timestamp is shifted +1h so the existing getUTC* helpers read Lagos wall-clock
@@ -65,9 +68,6 @@ export let reactions: Reaction[] = []
 export let segments: Segment[] = []
 export type Community = { id: string; name: string; platform: string; timezone: string; createdAt: Date; memberCount: number; description?: string }
 type RawCommunity = { id: string; name: string; platform: string; timezone: string; createdAt: string; memberCount: number; description?: string }
-// The community record itself. Nothing but the Overview needed it, but the
-// greeting names the community, and hardcoding "Mithril Community" in a page
-// would drift from the generated data the moment that changes.
 export let community: Community = { id: '', name: 'Community', platform: '', timezone: '', createdAt: new Date(0), memberCount: 0, description: '' }
 
 const loadJson = async (url: string) => {
@@ -120,17 +120,6 @@ export async function loadData(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Roster membership
 // ---------------------------------------------------------------------------
-// A member leaves the server at a point in time, so "is this person on the
-// roster" is a function of WHEN you ask, not a single boolean. Every consumer
-// (totals, tiers, retention, segments, network stats) must go through these two
-// helpers, otherwise the same member is simultaneously counted and excluded
-// depending on which module is asking -- and a "Total members" figure that
-// silently included people who left reads as a growing community on a server
-// that is actually losing members.
-//
-// leftAt is inclusive of the departure instant: a member who left on 20 Aug is
-// on the roster through 20 Aug and gone from 21 Aug. Bots are never on the
-// roster for member-facing counts.
 export function joinedBy(m: Member, when: Date): boolean {
   return m.joinedAt.getTime() <= when.getTime()
 }
@@ -139,13 +128,9 @@ export function presentAt(m: Member, when: Date): boolean {
   if (!joinedBy(m, when)) return false
   return m.leftAt === null || m.leftAt.getTime() > when.getTime()
 }
-// Still on the server at the end of the data window — the roster any
-// "right now" total should count.
 export function onRoster(m: Member): boolean {
   return m.leftAt === null
 }
-// Members who joined, left, or both inside [from, to]. Period-scoped membership
-// movement, which is the basis for the Overview's New / Left / Net snapshot.
 export function membershipFlow(from: Date, to: Date): { joined: Member[]; left: Member[] } {
   const fromMs = from.getTime(), toMs = to.getTime()
   const joined = members.filter((m) => !m.bot && m.joinedAt.getTime() > fromMs && m.joinedAt.getTime() <= toMs)

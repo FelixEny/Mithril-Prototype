@@ -25,8 +25,16 @@ Figma (v2, "People page" frames) defines these columns:
 | **Activity graph** | Compact per-period activity sparkline for the member. |
 
 Sorting, search, and pagination apply (Influence is sortable and filterable by
-minimum score). Only member-generated activity counts; bots and members who
+condition — an operator with a value, or a custom from/to range). Only
+member-generated activity counts; bots and members who
 have left are excluded from the table and analytics.
+
+**Watch segments** are the one exception to the default column set: when the
+selected segment carries a `watchWindow` (stamped by Engagement's Members to
+watch "Create a segment" action), the table swaps to the watch columns —
+Member, **Change** (the tier move or activity shift that made the list),
+Activity level, Activity graph — ordered by the original watch ranking. See
+`docs/pages/engagement.md` §13.
 
 The People page has **no date-range picker**. Every value is fixed relative to
 the data end ("now") and does not change with the dashboard's selected period —
@@ -42,11 +50,15 @@ multiple values can be combined (e.g. Superuser + Contributor at once).
 - Activity level filter → table shows members whose tier is in the selection.
 - Roles filter → table shows members holding any selected role.
 - Role Count filter → table shows members whose number of assigned roles matches
-  the chosen comparison (**Exactly** / **More than** / **At least** / **Fewer
-  than** / **At most** N). Duplicates count once and the default `@everyone`
+  the chosen comparison (**Exactly** / **More than** / **Less than** / **At
+  most** / **At least** N). Duplicates count once and the default `@everyone`
   role is excluded. Independent of the Roles filter; combined with it (and every
   other filter) using the standard AND semantics.
-- Influence score filter → table shows members scoring at or above the chosen minimum (trailing 28-day Influence Score).
+- Influence score filter → table shows members whose trailing 28-day Influence
+  Score matches the chosen condition (**Exactly** / **More than** / **Less
+  than** / **At most** / **At least** N), or falls within a **Custom range**
+  (inclusive from/to, both 0–100; a missing bound defaults to the rest of the
+  span, so from-only means "from N to 100").
 - Segments filter → table shows the segment's current membership (see §4).
 
 Filters combine with search and row selection. The purple filter tag pattern
@@ -83,7 +95,9 @@ A segment is a saved filtered list. There are two creation flows:
 `archetypes`, `roles` (any-match), `activityTier` (trailing 28d),
 `activeWithinDays`, `minMessagesWithinDays`, `joinedWithinDays`,
 `joinedBeforeDays`, `roleCount` (`{ op, value }`, compared against the member's
-unique non-`@everyone` role count). All days-based criteria are relative to the
+unique non-`@everyone` role count), `influence` (`{ op, value }` or an
+inclusive `{ from, to }` range, both 0–100, compared against the member's
+trailing-28-day Influence Score). All days-based criteria are relative to the
 evaluation `asOf` date.
 
 ### Seed segments

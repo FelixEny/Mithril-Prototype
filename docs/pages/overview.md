@@ -36,10 +36,10 @@ matching glyph:
 
 | Local hour | Greeting | Glyph |
 | --- | --- | --- |
-| `h < 12` | `Good Morning` | `sunrise` |
-| `h < 18` | `Good Afternoon` | `sun` |
-| `h < 22` | `Good Evening` | `cityscape-at-dusk` |
-| otherwise | `Good Night` | `crescent-moon` |
+| `h < 12` | `Good Morning, <owner>` | `sunrise` |
+| `h < 18` | `Good Afternoon, <owner>` | `sun` |
+| `h < 22` | `Good Evening, <owner>` | `cityscape-at-dusk` |
+| otherwise | `Good Night, <owner>` | `crescent-moon` |
 
 The glyph value is the file name of a vendored Fluent Emoji SVG in
 `public/emoji/`, not a Unicode codepoint — a codepoint would be drawn by
@@ -54,11 +54,15 @@ pages. It is evaluated at render time, so it does not tick over while the page
 stays open. The glyph is `aria-hidden`, since the band is already named by the
 words beside it.
 
-It does **not** name a person. Mithril has no account model in the prototype, and
-a hard-coded name would assert something the data does not know. Figma's "Good
-Morning Felix 🌅," is placeholder copy for a state the prototype does not model —
-and the one place a Unicode codepoint still appears in this repo, since it quotes
-the design rather than rendering it.
+The line is addressed to the community manager, so it now carries their first
+name — `Good Afternoon, Dave 🌅`. `greeting()` itself stays person-free (band and
+glyph only); `OverviewPage` appends `, <owner>`, read from the active workspace's
+`owner` field in `src/data/workspaces.json`. The prototype has no account model,
+so the name is workspace data rather than a signed-in user, and it is fixed for
+the session — the prototype tracks a single CM. The field is optional: a
+workspace without one renders the bare band. Naming the manager follows Figma's
+`Good Morning Felix 🌅` example; the band still resolves from the viewer's local
+clock, so the greeting addresses the person at the screen.
 
 ## 4. Lead story
 
@@ -117,9 +121,7 @@ The shared `StrengthCard` component, rendered with `showFoot={false}`.
 
 The card title carries **no** supporting action: an earlier version summarised the
 weights there (`Weights · Connectedness 35% · …`), but each bar row already labels
-its own `% weight`, so the summary only repeated them. Dropping the `action` also
-means `CardTitle` applies `card-title-no-action`, which sets a 16px title padding in
-place of the 12px `metrics-title` padding.
+its own `% weight`, so the summary only repeated them.
 
 ### Basis window
 

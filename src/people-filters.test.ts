@@ -2,12 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  ROLE_COUNT_OPS,
+  COMPARE_OPS,
   applyPeopleFilters,
-  matchesRoleCount,
+  matchesCompare,
   roleCountOf,
   type FilterableRow,
-  type RoleCountOp,
+  type CompareOp,
 } from './people-filters.ts'
 
 // ---------------------------------------------------------------------------
@@ -16,48 +16,48 @@ import {
 
 test('comparison operators match their documented boundaries', () => {
   // More than 3 = 4 or more
-  assert.equal(matchesRoleCount(4, 'more-than', 3), true)
-  assert.equal(matchesRoleCount(5, 'more-than', 3), true)
-  assert.equal(matchesRoleCount(3, 'more-than', 3), false)
-  assert.equal(matchesRoleCount(0, 'more-than', 3), false)
+  assert.equal(matchesCompare(4, 'more-than', 3), true)
+  assert.equal(matchesCompare(5, 'more-than', 3), true)
+  assert.equal(matchesCompare(3, 'more-than', 3), false)
+  assert.equal(matchesCompare(0, 'more-than', 3), false)
   // Exactly 3
-  assert.equal(matchesRoleCount(3, 'exactly', 3), true)
-  assert.equal(matchesRoleCount(2, 'exactly', 3), false)
-  assert.equal(matchesRoleCount(4, 'exactly', 3), false)
+  assert.equal(matchesCompare(3, 'exactly', 3), true)
+  assert.equal(matchesCompare(2, 'exactly', 3), false)
+  assert.equal(matchesCompare(4, 'exactly', 3), false)
   // At least 3 = 3 or more
-  assert.equal(matchesRoleCount(3, 'at-least', 3), true)
-  assert.equal(matchesRoleCount(4, 'at-least', 3), true)
-  assert.equal(matchesRoleCount(2, 'at-least', 3), false)
+  assert.equal(matchesCompare(3, 'at-least', 3), true)
+  assert.equal(matchesCompare(4, 'at-least', 3), true)
+  assert.equal(matchesCompare(2, 'at-least', 3), false)
   // Fewer than 3
-  assert.equal(matchesRoleCount(2, 'fewer-than', 3), true)
-  assert.equal(matchesRoleCount(0, 'fewer-than', 3), true)
-  assert.equal(matchesRoleCount(3, 'fewer-than', 3), false)
+  assert.equal(matchesCompare(2, 'fewer-than', 3), true)
+  assert.equal(matchesCompare(0, 'fewer-than', 3), true)
+  assert.equal(matchesCompare(3, 'fewer-than', 3), false)
   // At most 3
-  assert.equal(matchesRoleCount(3, 'at-most', 3), true)
-  assert.equal(matchesRoleCount(2, 'at-most', 3), true)
-  assert.equal(matchesRoleCount(4, 'at-most', 3), false)
+  assert.equal(matchesCompare(3, 'at-most', 3), true)
+  assert.equal(matchesCompare(2, 'at-most', 3), true)
+  assert.equal(matchesCompare(4, 'at-most', 3), false)
 })
 
 test('operators handle zero counts correctly', () => {
-  assert.equal(matchesRoleCount(0, 'exactly', 0), true)
-  assert.equal(matchesRoleCount(1, 'exactly', 0), false)
-  assert.equal(matchesRoleCount(0, 'more-than', 0), false)
-  assert.equal(matchesRoleCount(1, 'more-than', 0), true)
-  assert.equal(matchesRoleCount(0, 'at-least', 0), true)
-  assert.equal(matchesRoleCount(0, 'at-most', 0), true)
-  assert.equal(matchesRoleCount(1, 'at-most', 0), false)
-  assert.equal(matchesRoleCount(0, 'fewer-than', 1), true)
-  assert.equal(matchesRoleCount(1, 'fewer-than', 1), false)
+  assert.equal(matchesCompare(0, 'exactly', 0), true)
+  assert.equal(matchesCompare(1, 'exactly', 0), false)
+  assert.equal(matchesCompare(0, 'more-than', 0), false)
+  assert.equal(matchesCompare(1, 'more-than', 0), true)
+  assert.equal(matchesCompare(0, 'at-least', 0), true)
+  assert.equal(matchesCompare(0, 'at-most', 0), true)
+  assert.equal(matchesCompare(1, 'at-most', 0), false)
+  assert.equal(matchesCompare(0, 'fewer-than', 1), true)
+  assert.equal(matchesCompare(1, 'fewer-than', 1), false)
 })
 
 test('the operator vocabulary covers exactly the five specified operators', () => {
   assert.deepEqual(
-    ROLE_COUNT_OPS.map((o) => o.value),
-    ['exactly', 'more-than', 'at-least', 'fewer-than', 'at-most'],
+    COMPARE_OPS.map((o) => o.value),
+    ['exactly', 'more-than', 'fewer-than', 'at-most', 'at-least'],
   )
   assert.deepEqual(
-    ROLE_COUNT_OPS.map((o) => o.label),
-    ['Exactly', 'More than', 'At least', 'Fewer than', 'At most'],
+    COMPARE_OPS.map((o) => o.label),
+    ['Exactly', 'More than', 'Less than', 'At most', 'At least'],
   )
 })
 
@@ -107,8 +107,8 @@ const ids = (rs: readonly FilterableRow[]) => new Set(rs.map((r) => r.id))
 
 // Independent restatement of the operator semantics, used only to compute
 // expected result sets from the corpus (guards against wiring mistakes in
-// applyPeopleFilters rather than reusing matchesRoleCount to prove itself).
-const expectPass = (count: number, op: RoleCountOp, value: number): boolean => {
+// applyPeopleFilters rather than reusing matchesCompare to prove itself).
+const expectPass = (count: number, op: CompareOp, value: number): boolean => {
   if (op === 'exactly') return count === value
   if (op === 'more-than') return count > value
   if (op === 'at-least') return count >= value
@@ -161,7 +161,7 @@ test('the shipped corpus assigns no @everyone entries', () => {
 })
 
 test('every operator over the real corpus matches an independent computation', () => {
-  const cases: [RoleCountOp, number][] = [
+  const cases: [CompareOp, number][] = [
     ['exactly', 0], ['exactly', 3], ['exactly', 7],
     ['more-than', 0], ['more-than', 3],
     ['at-least', 0], ['at-least', 3],
@@ -220,10 +220,10 @@ test('combines with activity tier and influence filters', () => {
   // Every fixture row is a Regular with influence 50, so these columns are
   // neutral: the role count result must pass through unchanged...
   assert.deepEqual(ids(applyPeopleFilters(rows, { tiers: ['Regular'], roleCount: rc })), baseline)
-  assert.deepEqual(ids(applyPeopleFilters(rows, { minInf: 40, roleCount: rc })), baseline)
+  assert.deepEqual(ids(applyPeopleFilters(rows, { influence: { op: 'at-least', value: 40 }, roleCount: rc })), baseline)
   // ...and excluded values must empty the result.
   assert.equal(applyPeopleFilters(rows, { tiers: ['Superuser'], roleCount: rc }).length, 0)
-  assert.equal(applyPeopleFilters(rows, { minInf: 60, roleCount: rc }).length, 0)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'at-least', value: 60 }, roleCount: rc }).length, 0)
 })
 
 test('combines with a segment id set as an intersection', () => {
@@ -237,4 +237,30 @@ test('no active filters returns every row, and Role Count off changes nothing', 
   assert.equal(applyPeopleFilters(rows, {}).length, rows.length)
   assert.equal(applyPeopleFilters(rows, { roleCount: null }).length, rows.length)
   assert.equal(applyPeopleFilters(rows, { roleCount: undefined, search: '' }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: null }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: undefined }).length, rows.length)
+})
+
+// ---------------------------------------------------------------------------
+// Influence score conditions (shared operators + custom range)
+// ---------------------------------------------------------------------------
+
+test('influence operators filter on the shared comparison vocabulary', () => {
+  // Every fixture row scores 50.
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'exactly', value: 50 } }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'at-least', value: 50 } }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'at-most', value: 50 } }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'more-than', value: 50 } }).length, 0)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'fewer-than', value: 50 } }).length, 0)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'at-least', value: 51 } }).length, 0)
+  assert.equal(applyPeopleFilters(rows, { influence: { op: 'exactly', value: 51 } }).length, 0)
+})
+
+test('a custom range filters influence inclusively at both bounds', () => {
+  assert.equal(applyPeopleFilters(rows, { influence: { from: 40, to: 60 } }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: { from: 50, to: 50 } }).length, rows.length)
+  assert.equal(applyPeopleFilters(rows, { influence: { from: 51, to: 60 } }).length, 0)
+  assert.equal(applyPeopleFilters(rows, { influence: { from: 40, to: 49 } }).length, 0)
+  // The filter is a raw comparison; the UI normalizes swapped bounds.
+  assert.equal(applyPeopleFilters(rows, { influence: { from: 60, to: 40 } }).length, 0)
 })

@@ -121,8 +121,6 @@ Image avatars are served locally so the prototype never depends on a third-party
 - Brand: `Color/Brand/200`
 - BrandMid: `Color/Brand/100`
 - BrandLight: `Color/Brand/50`
-- AreaFill: `#5926C8` (`--chart-area-fill`, gradient under the roster line; not in
-  the documented palette — the value comes from the Figma gradient)
 - Negative: `Color/Red/200` (`--chart-negative`, negative values such as left members)
 
 #### Heatmap (activity grid)
@@ -270,6 +268,11 @@ Two deliberate departures from a plain Semibold-heading reading:
     a separate node — `aria-hidden`, since the four bands are already stated in
     words. A wrapper with no size of its own would only inherit the 24px and
     change nothing.
+  - The line carries the community manager's first name (`Good Afternoon, Dave 🌅`).
+    `greeting()` returns the band and glyph only; `OverviewPage` appends
+    `, <owner>` from the active workspace's `owner` field. The name is a plain
+    suffix on the same line, so it inherits the greeting's 24px Medium
+    `--content-secondary` with no separate styling or emphasis.
 - The **Overview lead story** is 40px at `--font-weight-medium`, with its
   load-bearing figure runs in `--content-primary` and the connective grammar in
   `--content-secondary` — the design's `{ts3}`/`{ts2}` records. The emphasis is

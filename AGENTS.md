@@ -103,7 +103,7 @@ Figma remains the visual source of truth.
 - Build reusable components when the same UI pattern appears in multiple places.
 - Do not create duplicate components that serve the same purpose.
 - Keep presentation components separate from data and business logic.
-- CardTitle is a standing rule exception: always render title on the left and the control (tabs, etc.) on the right, even when Figma stacks them. Keep the CardTitle layout unchanged regardless of the design. When CardTitle has no `action`, apply 16px top padding (`.card-title-no-action`).
+- CardTitle is a standing rule exception: always render title on the left and the control (tabs, etc.) on the right, even when Figma stacks them. Keep the CardTitle layout unchanged regardless of the design. CardTitle top padding is always 16px, with or without an `action`.
 
 ### Lists (dropdown menus)
 

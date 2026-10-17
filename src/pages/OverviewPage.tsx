@@ -48,8 +48,7 @@ export function OverviewPage({ onNavigate }: { onNavigate: (page: PageKey) => vo
   // Read once at render time, so the band the visitor first sees is the band
   // that stays for the session rather than ticking over while the page is open.
   const h = greeting(new Date())
-
-  if (snapshot) return <CommunitySnapshotPage w={w} effDays={effDays} onBack={() => setSnapshot(false)} />
+  if (snapshot) return <CommunitySnapshotPage onBack={() => setSnapshot(false)} />
 
   return <>
     <PageHeader title={<>{h.text}<img className="greeting-emoji" src={`/emoji/${h.emoji}.svg`} alt="" aria-hidden="true" /></>} headerClassName="header-greeting" titleClassName="greeting-title"/>

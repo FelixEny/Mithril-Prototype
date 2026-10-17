@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { ArrowsOutSimple, CursorClick, Info, MagnifyingGlass, Minus, Plus } from '@phosphor-icons/react'
+import MithrilIcon from '../assets/mithril-icon.svg'
 import type { RelationshipsData } from '../relationships'
 import { GraphEngine, type GraphFilter, type AvatarDiagnostics } from '../graph/renderer'
 import { MemberPopup } from './MemberPopup'
@@ -198,7 +199,7 @@ export const NetworkGraph = forwardRef<NetworkGraphHandle, NetworkGraphProps>(fu
       <div className="graph-canvas" ref={canvasRef} role="img" aria-label="Relationship graph" />
       {loading && (
         <div className="graph-loading" role="status" aria-label="Building graph">
-          <div className="graph-loading-spin" />
+          <img className="graph-loading-logo" src={MithrilIcon} alt="" />
           <span className="graph-loading-label">Building graph…</span>
         </div>
       )}

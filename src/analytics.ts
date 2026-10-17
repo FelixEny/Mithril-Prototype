@@ -4,7 +4,7 @@ import type { RangeDays } from './ranges'
 // entry point they already use; the preset list itself lives in ./ranges.
 export type { RangeDays } from './ranges'
 const day = 86400000; const unique = <T,>(items: T[]) => new Set(items)
-const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+export const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 export const formatNumber = (value: number) => new Intl.NumberFormat('en-US', { notation: value > 9999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
 export const formatPercent = (value: number) => `${Math.round(value)}%`
 // Heatmap intensity levels. Active Members is the primary metric driving the
@@ -180,7 +180,7 @@ export interface DashboardWindow {
   // is the block's mean cell score ÷ the window-wide baseline score (≈ the
   // average hourly activity, expressed as × the baseline).
   peaks: { weekday: number; minHour: number; maxHour: number; avgActive: number; avgMessages: number; score: number; relative: number }[]
-  channelRows: { id: string; name: string; messages: number; active: number }[]
+  channelRows: { id: string; name: string; messages: number; active: number; msgChange: number | null }[]
   // `lastAt` is the most recent message in the row's 3-hour activity slice. The
   // Mithril feed needs a real event time for its "3h ago" column; the other three
   // feed rows are window aggregates and have none, which is why this field exists
@@ -284,9 +284,13 @@ export function dashboardWindow(start: Date, end: Date): DashboardWindow {
     const score = b.cells.reduce((n, c) => n + cellScore(c), 0) / b.cells.length
     return { weekday: b.weekday, minHour: b.minHour, maxHour: b.maxHour, avgActive: b.cells.reduce((n, c) => n + c.active, 0) / b.cells.length, avgMessages: b.cells.reduce((n, c) => n + c.messages, 0) / b.cells.length, score, relative: score / Math.max(baseline, 1e-6) }
   }).sort((a, b) => b.score - a.score || b.avgActive - a.avgActive)
-  const channelRows = channels.map(c => ({ ...c, messages: periodMessages.filter(x => x.channelId === c.id).length, active: unique(periodMessages.filter(x => x.channelId === c.id).map(x => x.memberId)).size })).sort((a,b)=>b.messages-a.messages)
+  // Per-channel message change vs the equally-long prior window: the same
+  // guard the headline delta uses (no prior messages -> null, rendered as an
+  // em dash rather than a fake 0%).
+  const priorMessages = messages.filter(x => x.at >= previousStart && x.at < start)
+  const channelRows = channels.map(c => { const cur = periodMessages.filter(x => x.channelId === c.id), prev = priorMessages.filter(x => x.channelId === c.id).length; return { ...c, messages: cur.length, active: unique(cur.map(x => x.memberId)).size, msgChange: prev ? (cur.length - prev) / prev * 100 : null } }).sort((a,b)=>b.messages-a.messages)
   const discussionRows = conversations.map(c => { const items = periodMessages.filter(x => x.conversationId === c.id), recent = items.filter(x => x.at >= new Date(end.getTime()-3*3600000)), priorItems = items.filter(x => x.at >= new Date(end.getTime()-27*3600000) && x.at < new Date(end.getTime()-3*3600000)), velocity = recent.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(recent.map(x=>x.memberId)).size, baseline = (priorItems.reduce((n,x)=>n+(x.hasReply?1:0)+x.reactions*.5,0)+unique(priorItems.map(x=>x.memberId)).size)/8, avatars = [...recent].sort((a,b)=>b.at.getTime()-a.at.getTime()).reduce((map,x)=>map.has(x.memberId)?map:map.set(x.memberId,(members.find(m=>m.id===x.memberId)?.name ?? x.memberId)),new Map<string,string>()); return { ...c, channel: channels.find(x=>x.id===c.channelId)!.name, replies: recent.filter(x=>x.hasReply).length, reactions: recent.reduce((n,x)=>n+x.reactions,0), participants: unique(recent.map(x=>x.memberId)).size, avatars: [...avatars].slice(0,3).map(([id,name])=>({id,name})), score: velocity / (baseline || 1), lastAt: recent.length ? new Date(Math.max(...recent.map(x => x.at.getTime()))) : null } }).sort((a,b)=>b.score-a.score)
-  const priorMessages = messages.filter(x => x.at >= previousStart && x.at < start), priorVoice = voiceSessions.filter(x => x.at >= previousStart && x.at < start), priorReplyRate = priorMessages.filter(x => x.hasReply).length / Math.max(1, priorMessages.length) * 100, priorReactionRate = priorMessages.filter(x => x.reactions > 0).length / Math.max(1, priorMessages.length) * 100, priorVoiceIds = unique(priorVoice.map(x => x.memberId)).size, priorVoiceMinutes = priorVoice.reduce((n, x) => n + x.minutes, 0)
+  const priorVoice = voiceSessions.filter(x => x.at >= previousStart && x.at < start), priorReplyRate = priorMessages.filter(x => x.hasReply).length / Math.max(1, priorMessages.length) * 100, priorReactionRate = priorMessages.filter(x => x.reactions > 0).length / Math.max(1, priorMessages.length) * 100, priorVoiceIds = unique(priorVoice.map(x => x.memberId)).size, priorVoiceMinutes = priorVoice.reduce((n, x) => n + x.minutes, 0)
   const delta = { active: prior.size ? (active.size - prior.size) / prior.size * 100 : 0, activeRate: activeRate - priorRate, activation: activationRate - priorActivation, retention: retHead.delta, messages: priorMessages.length ? (periodMessages.length - priorMessages.length) / priorMessages.length * 100 : 0, replyRate: current.replyRate - priorReplyRate, reactionRate: current.reactionRate - priorReactionRate, voice: priorVoiceIds ? (voiceIds.size - priorVoiceIds) / priorVoiceIds * 100 : 0, voiceMinutes: priorVoiceMinutes ? (current.voiceMinutes - priorVoiceMinutes) / priorVoiceMinutes * 100 : 0, totalMembers: rosterAtStart ? (rosterAtEnd - rosterAtStart) / rosterAtStart * 100 : 0, joined: joinedPrior ? (joined - joinedPrior) / joinedPrior * 100 : 0, left: leftPrior ? (left - leftPrior) / leftPrior * 100 : 0 }
   const result = { start, end, current, totalMembers, roster: { atEnd: rosterAtEnd, inWindow: rosterInWindow }, joined, left, delta, activation: { activated, eligible: eligible.length }, retention: { returned: retHead.returned, prior: retHead.eligible }, series, tiers, heat, peaks, channelRows, discussionRows }
   dashboardCache.set(cacheKey, result)
@@ -609,7 +613,64 @@ export function membersToWatch(start: Date, end: Date): MemberWatchRow[] {
   return rows
 }
 
+// Top active members for the selected window: the five busiest members by
+// message volume. Same roster rules as membersToWatch (bots and members who
+// left before `end` never qualify) and the same tally sources, so the Top
+// active members and Members to watch cards can never disagree about who was
+// active. Active days count every qualifying-activity day (messages plus
+// reaction/voice event stamps) but are capped at the window's day count: the
+// window stamps land at 23:59, so its first calendar date is only covered by
+// a one-minute sliver, and displaying N+1 on an N-day range reads as a bug.
+// Channels counts distinct channels with at least one message sent in the
+// window. Deterministic, so the list is stable across reloads.
+export interface TopActiveRow { id: string; name: string; handle: string; messages: number; activeDays: number; channels: number }
+const topActiveCache = new Map<string, TopActiveRow[]>()
+export function topActiveMembers(start: Date, end: Date): TopActiveRow[] {
+  const startMs = start.getTime(), endMs = end.getTime()
+  const key = `${startMs}|${endMs}`
+  const hit = topActiveCache.get(key)
+  if (hit) return hit
+  ensureIndex()
+  const msgs = new Map<string, number>(), days = new Map<string, Set<string>>(), ch = new Map<string, Set<string>>()
+  for (const x of messages) {
+    const t = x.at.getTime()
+    if (t < startMs || t > endMs) continue
+    msgs.set(x.memberId, (msgs.get(x.memberId) ?? 0) + 1)
+    let d = days.get(x.memberId); if (!d) { d = new Set(); days.set(x.memberId, d) }
+    d.add(new Date(t).toDateString())
+    let c = ch.get(x.memberId); if (!c) { c = new Set(); ch.set(x.memberId, c) }
+    c.add(x.channelId)
+  }
+  for (const [id, ev] of eventsByMember) {
+    for (const t of ev) {
+      if (t < startMs || t > endMs) continue
+      let d = days.get(id); if (!d) { d = new Set(); days.set(id, d) }
+      d.add(new Date(t).toDateString())
+    }
+  }
+  const rows: TopActiveRow[] = []
+  const windowDays = Math.max(1, Math.round((endMs - startMs) / day))
+  for (const m of members) {
+    if (m.bot || !presentAt(m, end)) continue
+    const mm = msgs.get(m.id) ?? 0
+    if (!mm) continue
+    rows.push({ id: m.id, name: m.name, handle: m.username ?? m.name.toLowerCase().replace(/[^a-z0-9]+/g, '.'), messages: mm, activeDays: Math.min(days.get(m.id)?.size ?? 0, windowDays), channels: ch.get(m.id)?.size ?? 0 })
+  }
+  rows.sort((a, b) => b.messages - a.messages || b.activeDays - a.activeDays || a.id.localeCompare(b.id))
+  const top = rows.slice(0, 5)
+  topActiveCache.set(key, top)
+  return top
+}
+
 // ---------------------------------------------------------------------------
 // Clock labels for peak windows ("7:00AM", "8:00PM")
 // ---------------------------------------------------------------------------
 export const clockLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}:00${h < 12 ? 'AM' : 'PM'}`
+
+// Absolute timestamps for event rows ("Aug 31, 6:00 PM"). Read in UTC, the same
+// frame as the membership buckets above, so a row's day always matches the bar
+// it sits under.
+export const formatTimestamp = (d: Date) => {
+  const h = d.getUTCHours(), m = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${monthNames[d.getUTCMonth()]} ${d.getUTCDate()}, ${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'AM' : 'PM'}`
+}

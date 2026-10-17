@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CaretDown, SquaresFour, X } from '@phosphor-icons/react'
+import { CaretDown, Selection, X } from '@phosphor-icons/react'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { Menu, MenuItem } from './Menu'
@@ -105,7 +105,7 @@ export function SegmentActionsBar({ selected, members, removeTarget, segments, o
         </div>
         <div className="seg-group seg-actions">
           <Button variant="secondary" onClick={() => setOpen(removeTarget ? 'remove' : 'add')}>{removeTarget ? 'Remove from segment' : 'Add to segment'}</Button>
-          <Button icon={<SquaresFour size={20} />} onClick={() => setOpen('create')}>Create a static segment</Button>
+          <Button icon={<Selection size={20} />} onClick={() => setOpen('create')}>Create a static segment</Button>
           <button type="button" className="seg-close" aria-label="Close and clear selection" onClick={onClose}><X size={16} /></button>
         </div>
       </div>

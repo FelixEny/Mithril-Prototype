@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDown, ArrowUp, Hash, TrendUp } from '@phosphor-icons/react'
-import { activationSeries, clockLabel, dashboard, dashboardWindow, formatNumber, formatPercent, membersToWatch, RangeDays, retentionSeries, type MemberWatchRow, type RetentionPoint } from '../analytics'
+import { ArrowDown, ArrowUp, Hash, TrendUp, X } from '@phosphor-icons/react'
+import { activationSeries, clockLabel, dashboard, dashboardWindow, formatNumber, formatPercent, membersToWatch, RangeDays, retentionSeries, topActiveMembers, type MemberWatchRow, type RetentionPoint } from '../analytics'
 import { endDate } from '../data'
 import { getMemberAvatar } from '../avatars'
 import { Avatar } from '../components/Avatar'
+import { Button } from '../components/Button'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { metricInfo } from '../help'
 import { MetricsCard } from '../components/MetricsCard'
@@ -16,17 +17,17 @@ import { PageHeader } from '../components/PageHeader'
 import { Card } from '../components/Card'
 import { TextLink } from '../components/TextLink'
 import { TierPill } from '../components/TierPill'
+import { createSegment } from '../segments'
+import { useToast } from '../toast'
 
 export interface RangeProps {
   range: RangeDays
   custom: { from: Date; to: Date } | null
   onSelectPreset: (d: RangeDays) => void
   onSelectRange: (from: Date, to: Date) => void
-  onOpenWatch?: (watch: MemberWatchRow[]) => void
-  peopleWatch?: MemberWatchRow[] | null
-  onClearWatch?: () => void
 }
 
+const dateFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 const DAY_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const NEGLIGIBLE_BAR = 1e-6
@@ -49,15 +50,64 @@ function CohortTooltip({ active, payload }: { active?: boolean; payload?: Array<
   return <div className="chart-tooltip"><span className="chart-tooltip-label">{p.date}</span>{COHORTS.map(c => <span className="chart-tooltip-row" key={c.key}><i style={{ background: c.color }} />{c.label}<b>{Math.round(p[c.key])}%</b></span>)}</div>
 }
 
-export function EngagementPage({ range, custom, onSelectPreset, onSelectRange, onOpenWatch }: RangeProps) {
+function WatchRows({ watch }: { watch: MemberWatchRow[] }) {
+  return <>
+    <div className="watch-head"><span>Member</span><span>Change</span></div>
+    {watch.map(w => <div className="watch-row" key={w.id}><span className="watch-member"><span className="watch-avatar"><Avatar spec={getMemberAvatar(w.id)} name={w.name} size={32} /></span><span className="watch-meta"><b>{w.name}</b><em>{w.handle}</em></span></span><span className="watch-activity"><span className={`watch-dir ${w.direction}`}>{w.direction === 'up' ? <ArrowUp size={12} weight="bold" /> : <ArrowDown size={12} weight="bold" />}</span>{w.kind === 'tier' && w.from && w.to ? <span className="watch-change">Moved from <TierPill tier={w.from} /> to <TierPill tier={w.to} /></span> : <span className="watch-change">{w.text}</span>}</span></div>)}
+  </>
+}
+
+export function EngagementPage({ range, custom, onSelectPreset, onSelectRange, onOpenSegmentInPeople }: RangeProps & { onOpenSegmentInPeople?: (segmentId: string) => void }) {
   const data = useMemo<ReturnType<typeof dashboardWindow> | null>(() => (custom ? dashboardWindow(custom.from, custom.to) : dashboard(range)), [range, custom])
   const d = data!
   const ret = retentionSeries(d.end)
   const actBars = activationSeries(d.end).map(p => ({ ...p, rate: p.rate ? p.rate : NEGLIGIBLE_BAR, noData: p.rate === null }))
   const watch = membersToWatch(d.start, d.end)
+  const top = topActiveMembers(d.start, d.end)
   const discussions = d.discussionRows
   const effDays = custom ? Math.max(1, Math.round((custom.to.getTime() - custom.from.getTime()) / 86400000)) : range
-  return <><PageHeader collapsible title="Engagement" subtitle="Understand how members participate in your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
+  const toast = useToast()
+  const [segOpen, setSegOpen] = useState(false)
+  const [segName, setSegName] = useState('')
+  const segInputRef = useRef<HTMLInputElement>(null)
+  const defaultSegName = `Members to watch – ${dateFmt.format(d.end)}`
+  const closeSeg = () => { setSegOpen(false); setSegName('') }
+  const commitCreateSegment = () => {
+    const name = segName.trim() || defaultSegName
+    // The window rides along as provenance: People re-runs membersToWatch on
+    // it to render the Change column, so the CM can still see why each member
+    // made the list.
+    const seg = createSegment({ name, kind: 'static', memberIds: watch.map((w) => w.id), watchWindow: { start: d.start.toISOString(), end: d.end.toISOString() } })
+    closeSeg()
+    toast.push({
+      kind: 'success',
+      title: 'Segment created',
+      message: `"${name}" added to your segments`,
+      action: { label: 'View in people page', onClick: () => onOpenSegmentInPeople?.(seg.id) },
+    })
+  }
+  useEffect(() => { if (segOpen) segInputRef.current?.focus() }, [segOpen])
+  useEffect(() => {
+    if (!segOpen) return
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSeg() }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  }, [segOpen])
+
+  return <>{segOpen && <div className="seg-scrim page" onMouseDown={closeSeg} aria-hidden="true" />}
+  {segOpen && <div className="seg-dialog watch-seg-dialog" role="dialog" aria-label="Create a static segment" aria-modal="true">
+    <button type="button" className="seg-dialog-close" aria-label="Close dialog" onClick={closeSeg}><X size={16} /></button>
+    <h3 className="seg-dialog-title">Create a static segment</h3>
+    <p className="seg-dialog-desc">A manually defined user group that stays fixed until updated.</p>
+    <div className="seg-dialog-body">
+      <input ref={segInputRef} className="seg-input" value={segName} placeholder={defaultSegName} aria-label="Segment name" onChange={(e) => setSegName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') commitCreateSegment() }} />
+    </div>
+    <div className="seg-dialog-actions">
+      <Button variant="secondary" onClick={closeSeg}>Cancel</Button>
+      <Button onClick={commitCreateSegment}>Create segment</Button>
+    </div>
+  </div>}
+  <PageHeader collapsible title="Engagement" subtitle="Understand how members participate in your community" action={<DateRangePicker range={range} custom={custom} endDate={endDate} onSelectPreset={onSelectPreset} onSelectRange={onSelectRange} />} />
   <MetricsCard title="Engagement depth" link="View chart" href="#" stats={[
     { label: 'Messages', info: metricInfo['Messages'], value: formatNumber(d.current.messages), change: { v: d.delta.messages, range: effDays } },
     { label: 'Reply rate', info: metricInfo['Reply rate'], value: formatPercent(d.current.replyRate), change: { v: d.delta.replyRate, pp: true, range: effDays } },
@@ -69,13 +119,16 @@ export function EngagementPage({ range, custom, onSelectPreset, onSelectRange, o
     <div className="peak-panel"><div className="peak-title"><h3>Peak activity</h3></div><div className="peak-rows">{d.peaks.map((b, i) => <div className="peak-row" key={i}><div className="peak-info"><span className="peak-day">{DAY_FULL[b.weekday]}</span><span className="peak-window">{clockLabel(b.minHour)}{b.maxHour !== b.minHour ? ` – ${clockLabel(b.maxHour)}` : ''}</span><span className="peak-avg">Avg: {Math.round(b.avgActive)} members – {Math.round(b.avgMessages)} msgs</span></div><div className="peak-scaler"><span className="peak-trend"><TrendUp size={16} />{b.relative.toFixed(1)}×</span><span className="peak-caption">Hourly avg.</span></div></div>)}</div></div>
   </Card>
   <div className="eng-grid">
-    <Card><CardTitle title="Retention" info={metricInfo['Retention']} action={<TextLink href="#">Learn more</TextLink>} /><div className="chart-stat"><h2>{formatPercent(d.current.retention)}</h2><Change v={d.delta.retention} pp caption="vs prior 28D" range={28} /></div><div className="chart-box"><div className="chart eng-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={ret} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}><CartesianGrid horizontal vertical={false} strokeDasharray="4 2" /><XAxis dataKey="label" tickLine={false} axisLine={{ stroke: 'var(--border-primary)' }} interval={0} /><YAxis tickLine={false} axisLine={false} width={36} domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tickFormatter={(v) => `${v}%`} /><Tooltip content={<CohortTooltip />} />{COHORTS.map(c => <Line key={c.key} type="linear" dataKey={c.key} name={c.label} stroke={c.color} strokeWidth={2} dot={false} />)}</LineChart></ResponsiveContainer></div></div><div className="ret-legend">{COHORTS.map(c => <span className="ret-legend-item" key={c.key}><i style={{ background: c.color }} />{c.label}</span>)}</div></Card>
+    <Card><CardTitle title="Retention" info={metricInfo['Retention']} action={<TextLink href="#">Learn more</TextLink>} /><div className="chart-stat"><h2>{formatPercent(d.current.retention)}</h2><Change v={d.delta.retention} pp caption="vs prior 28D" range={28} /></div><div className="chart-box"><div className="chart eng-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={ret} margin={{ top: 16, right: 12, left: 0, bottom: 20 }}><CartesianGrid horizontal vertical={false} strokeDasharray="4 2" /><XAxis dataKey="label" tickLine={false} axisLine={{ stroke: 'var(--border-primary)' }} interval={0} /><YAxis tickLine={false} axisLine={false} width={36} domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tickFormatter={(v) => `${v}%`} /><Tooltip content={<CohortTooltip />} />{COHORTS.map(c => <Line key={c.key} type="linear" dataKey={c.key} name={c.label} stroke={c.color} strokeWidth={2} dot={false} />)}</LineChart></ResponsiveContainer></div></div><div className="ret-legend">{COHORTS.map(c => <span className="ret-legend-item" key={c.key}><i style={{ background: c.color }} />{c.label}</span>)}</div></Card>
     <Card><CardTitle title="New member activation" info={metricInfo['New member activation']} /><div className="chart-stat"><h2>{formatPercent(d.current.activation)}</h2><Change v={d.delta.activation} pp range={effDays} /></div><div className="chart-box act-chart-box"><div className="chart eng-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={actBars} layout="vertical" margin={{ top: 8, right: 12, left: 0, bottom: 4 }} barCategoryGap="30%"><CartesianGrid horizontal={false} vertical strokeDasharray="4 2" /><XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickLine={false} axisLine={{ stroke: 'var(--border-primary)' }} tickFormatter={(v) => `${v}%`} /><YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={112} interval={0} /><Tooltip content={<RateTooltip metric="Activation" />} cursor={{ fill: 'var(--surface-tertiary)', stroke: 'none' }} /><Bar dataKey="rate" name="Activation" fill="var(--content-brand)" radius={[0, 4, 4, 0]} background={{ fill: 'var(--surface-tertiary)', radius: 4 }} /></BarChart></ResponsiveContainer></div></div></Card>
   </div>
   <div className="eng-grid">
-    <Card><CardTitle title="Engagement by channel" /><div className="chan-head"><span className="chan-rank">#</span><span>Channel</span><span>Active members</span><span>Messages</span></div>{d.channelRows.slice(0, 5).map((r, i) => <div className="chan-row" key={r.id}><span className="chan-rank">{i + 1}</span><span className="tag"><Hash size={20} />{r.name}</span><span className="chan-count">{formatNumber(r.active)}</span><span className="chan-count">{formatNumber(r.messages)}</span></div>)}</Card>
-    <Card><CardTitle title="Members to watch" info={metricInfo['Members to watch']} action={<TextLink onClick={() => onOpenWatch?.(watch)}>View in people</TextLink>} /><div className="watch-head"><span>Member</span><span>Change</span></div>{watch.map(w => <div className="watch-row" key={w.id}><span className="watch-member"><span className="watch-avatar"><Avatar spec={getMemberAvatar(w.id)} name={w.name} size={32} /></span><span className="watch-meta"><b>{w.name}</b><em>{w.handle}</em></span></span><span className="watch-activity"><span className={`watch-dir ${w.direction}`}>{w.direction === 'up' ? <ArrowUp size={12} weight="bold" /> : <ArrowDown size={12} weight="bold" />}</span>{w.kind === 'tier' && w.from && w.to ? <span className="watch-change">Moved from <TierPill tier={w.from} /> to <TierPill tier={w.to} /></span> : <span className="watch-change">{w.text}</span>}</span></div>)}</Card>
+    <Card><CardTitle title="Engagement by channel" /><div className="chan-head"><span className="chan-rank">#</span><span>Channel</span><span>Active members</span><span>Messages</span><span>Change</span></div>{d.channelRows.slice(0, 5).map((r, i) => <div className="chan-row" key={r.id}><span className="chan-rank">{i + 1}</span><span className="tag"><Hash size={20} />{r.name}</span><span className="chan-count">{formatNumber(r.active)}</span><span className="chan-count">{formatNumber(r.messages)}</span><span className={`chan-change ${r.msgChange === null ? 'neutral' : r.msgChange >= 0 ? 'up' : 'down'}`}>{r.msgChange === null ? <>&mdash;</> : <>{r.msgChange >= 0 ? <ArrowUp size={12} weight="bold" /> : <ArrowDown size={12} weight="bold" />}{Math.round(Math.abs(r.msgChange))}%</>}</span></div>)}</Card>
+    <Card className="trend-card"><CardTitle title="Trending discussions" /><div className="discussion-head"><span>Channel</span><span>Conversation</span></div>{discussions.slice(0, 4).map(x => <div className="discussion" key={x.id}><span className="tag"><Hash size={20} />{x.channel}</span><div><p>{x.text}</p><div className="discussion-meta"><span className="meta-avatars"><span className="avatar-stack" title={`${x.participants} participants`}>{x.avatars.slice(0, 3).map((m, i) => <span className="avatar-slot" key={m.id} style={{ zIndex: i }}><Avatar spec={getMemberAvatar(m.id)} name={m.name} /></span>)}</span>{x.participants > 3 && <em className="avatar-others">+{x.participants - 3} others</em>}</span><span className="stat"><b>{formatNumber(x.replies)}</b> Replies</span><span className="stat"><b>{formatNumber(x.reactions)}</b> Reactions</span><strong><TrendUp size={12} />{x.score.toFixed(1)}×<small> usual activity</small></strong></div></div></div>)}</Card>
   </div>
-  <Card className="trend-card"><CardTitle title="Trending discussions" /><div className="discussion-head"><span>Channel</span><span>Conversation</span></div>{discussions.slice(0, 4).map(x => <div className="discussion" key={x.id}><span className="tag"><Hash size={20} />{x.channel}</span><div><p>{x.text}</p><div className="discussion-meta"><span className="meta-avatars"><span className="avatar-stack" title={`${x.participants} participants`}>{x.avatars.slice(0, 3).map((m, i) => <span className="avatar-slot" key={m.id} style={{ zIndex: i }}><Avatar spec={getMemberAvatar(m.id)} name={m.name} /></span>)}</span>{x.participants > 3 && <em className="avatar-others">+{x.participants - 3} others</em>}</span><span className="stat"><b>{formatNumber(x.replies)}</b> Replies</span><span className="stat"><b>{formatNumber(x.reactions)}</b> Reactions</span><strong><TrendUp size={12} />{x.score.toFixed(1)}×<small> usual activity</small></strong></div></div></div>)}</Card>
+  <div className="eng-grid">
+    <Card><CardTitle title="Top active members" /><div className="top-head"><span className="chan-rank">#</span><span>Member</span><span>Messages</span><span>Active days</span><span>Channels</span></div>{top.map((r, i) => <div className="top-row" key={r.id}><span className="chan-rank">{i + 1}</span><span className="watch-member"><span className="watch-avatar"><Avatar spec={getMemberAvatar(r.id)} name={r.name} size={32} /></span><span className="watch-meta"><b>{r.name}</b><em>{r.handle}</em></span></span><span className="top-count">{formatNumber(r.messages)}</span><span className="top-count">{r.activeDays}</span><span className="top-count">{r.channels}</span></div>)}</Card>
+    <Card><CardTitle title="Members to watch" info={metricInfo['Members to watch']} action={<TextLink onClick={() => { setSegName(defaultSegName); setSegOpen(true) }}>Create a segment</TextLink>} /><WatchRows watch={watch} /></Card>
+  </div>
   </>
 }

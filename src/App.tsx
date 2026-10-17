@@ -4,7 +4,7 @@ import { PageHeader } from './components/PageHeader'
 import DashboardSkeleton from './components/DashboardSkeleton'
 import { Sk } from './components/Skeleton'
 import { loadData } from './data'
-import { RangeDays, type MemberWatchRow } from './analytics'
+import { RangeDays } from './analytics'
 import { DEFAULT_RANGE } from './ranges'
 import { ToastProvider } from './toast'
 import { Toaster } from './components/Toaster'
@@ -77,16 +77,16 @@ export default function App() {
   const [page, setPage] = useState<PageKey>(hashPage)
   const [range, setRange] = useState<RangeDays>(DEFAULT_RANGE)
   const [custom, setCustom] = useState<{ from: Date; to: Date } | null>(null)
-  const [peopleWatch, setPeopleWatch] = useState<MemberWatchRow[] | null>(null)
   const [focusMember, setFocusMember] = useState<string | null>(null)
+  const [focusSegment, setFocusSegment] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
   const [visited, setVisited] = useState<Set<PageKey>>(() => new Set([hashPage()]))
   const navigate = (p: PageKey) => {
     setPage(p)
     window.history.replaceState(null, '', `#/${p.toLowerCase()}`)
   }
-  const openWatch = (watch: MemberWatchRow[]) => {
-    setPeopleWatch(watch)
+  const openSegmentInPeople = (segmentId: string) => {
+    setFocusSegment(segmentId)
     navigate('People')
   }
   const exploreMember = (memberId: string) => {
@@ -131,13 +131,13 @@ export default function App() {
       const y = window.scrollY
       if (y > 64) document.body.classList.add('header-compact')
       else if (y < 24) document.body.classList.remove('header-compact')
+      document.body.classList.toggle('is-scrolled', y > 0)
     }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
   const rangeProps: RangeProps = { range, custom, onSelectPreset: (d) => { setRange(d); setCustom(null) }, onSelectRange: (from, to) => setCustom({ from, to }) }
-  const peopleProps: RangeProps = { ...rangeProps, peopleWatch, onClearWatch: () => setPeopleWatch(null) }
   if (bench || isBench()) {
     return <ToastProvider><Suspense fallback={<div className="app"><main aria-busy="true"><DashboardSkeleton /></main></div>}><BenchmarkPage /></Suspense><Toaster /></ToastProvider>
   }
@@ -145,9 +145,9 @@ export default function App() {
     ? <div className="app"><Sidebar active={page} onNavigate={navigate} /><main aria-busy="true"><PageHeader title={page} subtitle={subtitles[page]} /><DashboardSkeleton /></main></div>
     : <div className="app"><Sidebar active={page} onNavigate={navigate} /><main>
         <PagePanel active={page === 'Overview'} show={visited.has('Overview') || page === 'Overview'}><OverviewPage onNavigate={navigate} /></PagePanel>
-        <PagePanel active={page === 'Engagement'} show={visited.has('Engagement') || page === 'Engagement'}><EngagementPage {...rangeProps} onOpenWatch={openWatch} /></PagePanel>
+        <PagePanel active={page === 'Engagement'} show={visited.has('Engagement') || page === 'Engagement'}><EngagementPage {...rangeProps} onOpenSegmentInPeople={openSegmentInPeople} /></PagePanel>
         <PagePanel active={page === 'Relationships'} show={visited.has('Relationships') || page === 'Relationships'}><RelationshipsPage {...rangeProps} active={page === 'Relationships'} focusMemberId={focusMember} onFocusConsumed={() => setFocusMember(null)} /></PagePanel>
-        <PagePanel active={page === 'People'} show={visited.has('People') || page === 'People'}><PeoplePage {...peopleProps} onExploreMember={exploreMember} /></PagePanel>
+        <PagePanel active={page === 'People'} show={visited.has('People') || page === 'People'}><PeoplePage {...rangeProps} focusSegmentId={focusSegment} onFocusSegmentConsumed={() => setFocusSegment(null)} onExploreMember={exploreMember} /></PagePanel>
       </main></div>
   return <ToastProvider>{app}<Toaster /></ToastProvider>
 }
